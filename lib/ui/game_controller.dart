@@ -4,6 +4,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../content/achievements.dart';
+import '../content/features.dart';
 import '../content/items.dart';
 import '../content/status.dart';
 import '../core/backstage.dart';
@@ -33,8 +34,23 @@ class LogLine {
 class GameController extends ChangeNotifier {
   GameController(TickerProvider vsync, int seed, {RunSetup setup = const RunSetup()})
       : game = Game.newRun(seed, setup: setup) {
+    _start(vsync, game.initialEvents);
+  }
+
+  /// Reprend une partie sauvegardée (déjà rejouée).
+  GameController.resume(TickerProvider vsync, this.game) {
+    _start(vsync, [
+      MessageEvent(
+        "Et nous revoilà en direct ! Notre candidat avait fait une petite pause. "
+        "Étage ${game.floor}, on reprend exactement où on en était.",
+        MessageKind.maestro,
+      ),
+    ]);
+  }
+
+  void _start(TickerProvider vsync, List<GameEvent> initial) {
     _ticker = vsync.createTicker(_onTick);
-    _ingest(game.initialEvents);
+    _ingest(initial);
     _snapshotPositions();
     _snapCamera = true;
     _ensureTicking();
@@ -188,6 +204,16 @@ class GameController extends ChangeNotifier {
     return ok;
   }
 
+  /// Choix devant un lieu interactif.
+  FeatureResult chooseFeature(int index) {
+    final r = game.chooseFeature(index);
+    if (r.text.isNotEmpty) log.add(LogLine(r.text, MessageKind.info));
+    _ingest(r.events);
+    _ensureTicking();
+    notifyListeners();
+    return r;
+  }
+
   /// Retour en scène : étage suivant.
   void leaveBackstage() {
     final events = game.leaveBackstage();
@@ -240,7 +266,13 @@ class GameController extends ChangeNotifier {
       game.level.tiles,
       p,
       target,
-      (q) => game.level.walkable(q) && game.explored.contains(q) && game.monsterAt(q) == null && game.chestAt(q) == null,
+      (q) =>
+          game.level.walkable(q) &&
+          game.explored.contains(q) &&
+          game.monsterAt(q) == null &&
+          game.chestAt(q) == null &&
+          game.featureAt(q) == null &&
+          !(game.trapAt(q)?.revealed ?? false),
       // On peut viser un coffre (ou un « coffre ») : le dernier pas le frappe.
       allowBlockedGoal: true,
     );
@@ -261,7 +293,7 @@ class GameController extends ChangeNotifier {
     }
     _perform(MoveAction(dir));
     // Un nouveau monstre en vue ou un coup reçu interrompt la marche.
-    final hurt = turnEvents.any((e) => e is AttackEvent && e.targetId == game.player.id);
+    final hurt = turnEvents.any((e) => (e is AttackEvent && e.targetId == game.player.id) || e is TrapEvent);
     if (hurt || !_autoKnownMonsters.containsAll(_visibleMonsterIds())) _autoPath = [];
   }
 
@@ -366,6 +398,14 @@ class GameController extends ChangeNotifier {
           final p = game.player.pos;
           floaters.add(Floater('VICTOIRE !', p.x.toDouble(), p.y.toDouble() - 0.8, const Color(0xFFFFD84D), nowMs,
               big: true));
+        case TrapEvent():
+          final k = TrapKind.values[e.kindIndex];
+          floaters.add(Floater(e.triggered ? 'PIEGE !' : '?!', e.pos.x.toDouble(), e.pos.y.toDouble() - 0.4,
+              Color(k.color), nowMs, big: e.triggered));
+          if (e.triggered) {
+            _shakeStartMs = nowMs;
+            _buzz(HapticFeedback.mediumImpact);
+          }
         case RevealEvent():
           floaters.add(Floater('!!!', e.pos.x.toDouble(), e.pos.y.toDouble() - 0.4, const Color(0xFFFF5050), nowMs,
               big: true));

@@ -9,6 +9,9 @@ import 'package:donjon_en_direct/content/achievements.dart';
 import 'package:donjon_en_direct/meta/profile.dart';
 import 'package:donjon_en_direct/meta/profile_store.dart';
 import 'package:donjon_en_direct/ui/screens/achievements_screen.dart';
+import 'package:donjon_en_direct/content/features.dart';
+import 'package:donjon_en_direct/core/grid.dart';
+import 'package:donjon_en_direct/ui/screens/feature_dialog.dart';
 import 'package:donjon_en_direct/ui/screens/hub_screen.dart';
 import 'package:donjon_en_direct/ui/screens/backstage_screen.dart';
 import 'package:donjon_en_direct/ui/screens/inventory_sheet.dart';
@@ -165,6 +168,45 @@ void main() {
     await tester.tap(find.text('REDIFFUSIONS'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Aucune rediffusion'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('lieu interactif : choisir une option puis continuer', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2220);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final atlas = (await tester.runAsync(_fakeAtlas))!;
+    late GameController ctrl;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(),
+      home: _Host((context, c) {
+        ctrl = c;
+        return Scaffold(
+          body: Builder(
+            builder: (ctx) => TextButton(
+              onPressed: () => FeatureDialog.show(ctx, c, atlas, c.game.activeFeature!),
+              child: const Text('go'),
+            ),
+          ),
+        );
+      }),
+    ));
+    final g = ctrl.game;
+    g.monsters.clear();
+    g.features.clear();
+    final d = Dir.all.firstWhere((d) => g.isFree(g.player.pos + d.delta));
+    g.features.add(Feature(g.player.pos + d.delta, FeatureKind.fountain));
+    g.act(MoveAction(d));
+    expect(g.activeFeature, isNotNull);
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fontaine douteuse'), findsOneWidget);
+    await tester.tap(find.text('Boire une gorgée'));
+    await tester.pumpAndSettle();
+    expect(find.text('CONTINUER'), findsOneWidget);
+    await tester.tap(find.text('CONTINUER'));
+    await tester.pumpAndSettle();
+    expect(g.activeFeature, isNull);
     expect(tester.takeException(), isNull);
   });
 

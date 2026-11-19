@@ -1,4 +1,5 @@
 import '../content/achievements.dart';
+import '../content/features.dart';
 import '../content/interviews.dart';
 import '../content/items.dart';
 import '../content/lines_fr.dart';
@@ -62,6 +63,16 @@ class DropAction extends PlayerAction {
   final String itemId;
 }
 
+/// Résultat d'un choix devant un lieu interactif.
+class FeatureResult {
+  const FeatureResult(this.text, this.events, {this.closed = true});
+  final String text;
+  final List<GameEvent> events;
+
+  /// Faux si le choix n'a rien fait (pas assez d'or…) : le dialogue reste ouvert.
+  final bool closed;
+}
+
 /// Contenu d'une loot box ouverte.
 class BoxResult {
   const BoxResult(this.tier, this.items, this.gold, {this.overflow = false});
@@ -93,7 +104,7 @@ int dailySeed(DateTime d) => ((d.year * 10000 + d.month * 100 + d.day) * 2654435
 
 /// État complet d'une run + moteur de tours. Pur Dart, déterministe pour une graine donnée.
 class Game {
-  Game.newRun(int seed, {this.setup = const RunSetup()}) : rng = Rng(seed) {
+  Game.newRun(this.seed, {this.setup = const RunSetup()}) : rng = Rng(seed) {
     final role = setup.role;
     baseAtk += role.atk;
     baseDef += role.def;
@@ -142,6 +153,12 @@ class Game {
 
   final Rng rng;
   final RunSetup setup;
+
+  /// Graine de la run (avec [setup] et [commands], elle suffit à tout reconstruire).
+  final int seed;
+
+  /// Journal des commandes du joueur : la sauvegarde rejoue ce journal à l'identique.
+  final commands = <String>[];
   int _airtime = 0;
   late Actor player;
   late Level level;
@@ -175,6 +192,34 @@ class Game {
   /// Boss de l'étage (étages 3, 6, 9, 12, 15).
   Actor? boss;
   bool _bossAnnounced = false;
+
+  // Variété : lieux, pièges, modificateurs
+  final features = <Feature>[];
+  final traps = <Trap>[];
+  FloorMod? floorMod;
+
+  /// Lieu devant lequel le joueur se trouve (dialogue de choix ouvert).
+  Feature? activeFeature;
+  bool _fallPending = false;
+  bool _fellRecently = false;
+  bool _prayedThisFloor = false;
+  int _lastMaestroTurn = 0;
+
+  int get sightRadius => floorMod == FloorMod.blackout ? 3 : fovRadius;
+
+  Feature? featureAt(Pos p) {
+    for (final f in features) {
+      if (f.pos == p) return f;
+    }
+    return null;
+  }
+
+  Trap? trapAt(Pos p) {
+    for (final t in traps) {
+      if (t.pos == p) return t;
+    }
+    return null;
+  }
 
   bool get bossAnnounced => _bossAnnounced;
   bool get bossAlive => boss != null && boss!.alive && monsters.contains(boss);
@@ -266,14 +311,22 @@ class Game {
 
   Iterable<FloorItem> itemsAt(Pos p) => floorItems.where((i) => i.pos == p);
 
-  bool isFree(Pos p) => level.walkable(p) && monsterAt(p) == null && player.pos != p && chestAt(p) == null;
+  bool isFree(Pos p) =>
+      level.walkable(p) && monsterAt(p) == null && player.pos != p && chestAt(p) == null && featureAt(p) == null;
 
   // ================================================================ tour de jeu
 
   /// Joue une action du joueur puis le tour des monstres. Renvoie les événements du tour.
   /// Une action impossible ne consomme pas de tour (liste vide ou simple message).
   List<GameEvent> act(PlayerAction action) {
-    if (gameOver || backstage != null) return const [];
+    final events = _act(action);
+    // Une action sans effet (mur, sac plein…) ne change rien : inutile de l'enregistrer.
+    if (events.isNotEmpty) commands.add(_encode(action));
+    return events;
+  }
+
+  List<GameEvent> _act(PlayerAction action) {
+    if (gameOver || backstage != null || activeFeature != null) return const [];
     final events = <GameEvent>[];
     final exploredBefore = explored.length;
     if (player.hasStatus(Status.stun) && action is! DescendAction) {
@@ -288,6 +341,12 @@ class Game {
         final target = player.pos + dir.delta;
         final m = monsterAt(target);
         final chest = chestAt(target);
+        final feature = featureAt(target);
+        if (feature != null && m == null) {
+          if (feature.used) return [MessageEvent('${feature.kind.title} : déjà utilisé. Il boude.')];
+          activeFeature = feature;
+          return [FeatureEvent(feature.pos)];
+        }
         if (m != null && m.disguised) {
           _reveal(m, events);
         } else if (m != null) {
@@ -298,6 +357,7 @@ class Game {
           events.add(MoveEvent(player.id, player.pos, target));
           player.pos = target;
           _collect(events);
+          _checkTrap(events);
         } else {
           return const [];
         }
@@ -355,6 +415,12 @@ class Game {
     _monstersTurn(events);
     _tickStatuses(events);
     turn++;
+    if (_fallPending && !gameOver) {
+      _fallPending = false;
+      _fall(events);
+      return events;
+    }
+    _spotTraps(events);
     if (rageTurns > 0) {
       rageTurns--;
       if (rageTurns == 0) events.add(const MessageEvent('Votre rage retombe.'));
@@ -366,6 +432,15 @@ class Game {
     _announceBoss(events);
     _checkLowHp(events);
     _checkAchievements(events);
+    if (!gameOver && turn - _lastMaestroTurn >= 40 && rng.chance(0.08)) {
+      // Commentaire spontané ou fausse coupure pub.
+      if (rng.chance(0.5)) {
+        _say(MaestroLines.ambient, events);
+      } else {
+        final s = rng.pick(show.sponsors).def;
+        _say(MaestroLines.ads, events, extra: {'sponsor': s.name, 'slogan': s.slogan});
+      }
+    }
     if (!gameOver) {
       _minHpRatioFloor = player.hpRatio < _minHpRatioFloor ? player.hpRatio : _minHpRatioFloor;
       _showTurn(events, waited: action is WaitAction, newTiles: explored.length - exploredBefore);
@@ -381,6 +456,219 @@ class Game {
     b.lastSeenTarget = player.pos;
     events.add(BossEvent(b.name));
     _say(MaestroLines.bossIntro, events, extra: {'boss': b.monster!.theName});
+  }
+
+  // ================================================================ lieux, pièges, modificateurs
+
+  void _spawnFeatures() {
+    if (level.rooms.length < 3) return;
+    final n = rng.range(1, 2) + (floor >= 6 ? 1 : 0);
+    for (var i = 0; i < n; i++) {
+      final p = _randomFreeCell();
+      if (p == null || p.manhattan(level.stairs) < 2) continue;
+      final kind = rng.pick(FeatureKind.values);
+      features.add(Feature(p, kind, sponsorIndex: rng.nextInt(show.sponsors.length)));
+    }
+    final nTraps = 1 + floor ~/ 3 + rng.range(0, 1);
+    for (var i = 0; i < nTraps; i++) {
+      final p = _randomFreeCell();
+      if (p == null || trapAt(p) != null) continue;
+      final canFall = !isBossFloor(floor) && floor < finalFloor - 1;
+      final kinds = [TrapKind.spikes, TrapKind.confetti, TrapKind.spotlight, if (canFall) TrapKind.trapdoor];
+      traps.add(Trap(p, rng.pick(kinds)));
+    }
+  }
+
+  void _applyFloorMod() {
+    switch (floorMod) {
+      case FloorMod.happyHour:
+        for (final m in monsters) {
+          if (!m.isBoss) m.statuses[Status.embarrassed] = 30;
+        }
+      case FloorMod.goldRain:
+        for (var i = 0; i < 6; i++) {
+          _place(FloorItem.gold(rng.range(4, 9) + floor * 2, const Pos(0, 0)));
+        }
+      case FloorMod.starMonster:
+        final pool = monsters.where((m) => !m.isBoss && !m.disguised).toList();
+        if (pool.isNotEmpty) {
+          final m = rng.pick(pool)
+            ..elite = true
+            ..atk += 3
+            ..def += 1;
+          m.maxHp *= 2;
+          m.hp = m.maxHp;
+        }
+      default:
+        break;
+    }
+  }
+
+  /// Le joueur marche sur un piège caché (ou non).
+  void _checkTrap(List<GameEvent> events) {
+    final t = trapAt(player.pos);
+    if (t == null) return;
+    t.revealed = true;
+    events.add(TrapEvent(t.pos, t.kind.index));
+    switch (t.kind) {
+      case TrapKind.spikes:
+        final dmg = 3 + floor;
+        player.hp -= dmg;
+        events.add(StatusDamageEvent(player.id, player.pos, dmg, Status.poison.index));
+        events.add(MessageEvent('Des pics jaillissent du sol (-$dmg) ! Le public grimace avec délectation.',
+            MessageKind.danger));
+        if (player.hp <= 0) _playerDown('des pics rétractables', events);
+      case TrapKind.confetti:
+        _applyStatus(player, Status.embarrassed, events);
+        show.addHype(6);
+        events.add(const MessageEvent('BOUM ! Un canon à confettis vous recouvre de paillettes. Très gênant.',
+            MessageKind.danger));
+      case TrapKind.spotlight:
+        _applyStatus(player, Status.burn, events);
+        events.add(const MessageEvent('Un projecteur surchauffé vous grille les sourcils !', MessageKind.danger));
+      case TrapKind.trapdoor:
+        traps.remove(t);
+        _fallPending = true;
+        events.add(const MessageEvent('Le sol se dérobe sous vos pieds ! AAAAAH !', MessageKind.danger));
+    }
+  }
+
+  /// Chute par une trappe : étage suivant, sans interview ni coulisses.
+  void _fall(List<GameEvent> events) {
+    _fellRecently = true;
+    _enterFloor(floor + 1, events);
+    final dmg = 4 + floor;
+    player.hp = (player.hp - dmg).clamp(1, player.maxHp);
+    events.add(StatusDamageEvent(player.id, player.pos, dmg, Status.stun.index));
+    events.add(MessageEvent('Atterrissage brutal (-$dmg) à l\'étage $floor.', MessageKind.danger));
+    _say(MaestroLines.trapFall, events);
+    show.addHype(10);
+    _checkAchievements(events);
+  }
+
+  /// Les pièges voisins peuvent être repérés.
+  void _spotTraps(List<GameEvent> events) {
+    for (final t in traps) {
+      if (t.revealed || t.pos.chebyshev(player.pos) > 1 || !rng.chance(0.3)) continue;
+      t.revealed = true;
+      events.add(TrapEvent(t.pos, t.kind.index, triggered: false));
+      events.add(MessageEvent('Vous repérez un piège : ${t.kind.label}.', MessageKind.good));
+      if (rng.chance(0.4)) _say(MaestroLines.trapSpotted, events);
+    }
+  }
+
+  /// Choix devant un lieu interactif. Le dernier choix (« passer ») ferme sans rien faire.
+  FeatureResult chooseFeature(int index) {
+    final f = activeFeature;
+    if (f == null || index < 0 || index >= f.kind.options.length) {
+      return const FeatureResult('', [], closed: false);
+    }
+    commands.add('f:$index');
+    final events = <GameEvent>[];
+    String text;
+    var close = true;
+    var use = true;
+    if (index == f.kind.options.length - 1) {
+      text = 'Vous passez votre chemin. MAESTRO soupire bruyamment dans les haut-parleurs.';
+      use = false;
+    } else {
+      final roll = rng.nextDouble();
+      switch ((f.kind, index)) {
+        case (FeatureKind.fountain, 0):
+          if (roll < 0.4) {
+            final before = player.hp;
+            player.hp = (player.hp + player.maxHp ~/ 2).clamp(0, player.maxHp);
+            events.add(HealEvent(player.pos, player.hp - before));
+            text = "C'est frais, c'est vert, ça soigne (+${player.hp - before} PV). Ne posez pas de questions.";
+          } else if (roll < 0.65) {
+            baseMaxHp += 3;
+            _recalcStats();
+            player.hp += 3;
+            text = 'Vos cellules frétillent. PV max +3. Vous brillez légèrement dans le noir.';
+          } else if (roll < 0.85) {
+            _applyStatus(player, Status.poison, events);
+            text = "C'était de l'eau d'égout aromatisée. Empoisonné. Le public applaudit.";
+          } else {
+            text = "Rien ne se passe. C'était de l'eau du robinet. La production est déçue.";
+          }
+        case (FeatureKind.fountain, _):
+          if (gold < 5) {
+            text = "Vous n'avez même pas 5 pièces. MAESTRO pouffe.";
+            close = false;
+            use = false;
+          } else {
+            gold -= 5;
+            if (roll < 0.45) {
+              show.addHype(12);
+              text = 'Vous faites un vœu. Le public trouve ça mignon (hype +12).';
+            } else if (roll < 0.75) {
+              _gainBox(BoxTier.bronze, 'Fontaine', events);
+              text = 'La fontaine recrache une loot box ! Elle avait faim de monnaie.';
+            } else {
+              text = 'La fontaine rote. Votre pièce est perdue. Bienvenue dans le capitalisme.';
+            }
+          }
+        case (FeatureKind.shrine, 0):
+          final cost = (player.maxHp * 0.1).ceil();
+          player.hp = (player.hp - cost).clamp(1, player.maxHp);
+          show.adjustSponsor(f.sponsorIndex, 70);
+          show.addHype(5);
+          _prayedThisFloor = true;
+          text = '${show.sponsors[f.sponsorIndex].def.name} accepte votre sacrifice (-$cost PV). '
+              'Ils vous aiment un peu plus. Un tout petit peu.';
+        case (FeatureKind.shrine, _):
+          final loot = 20 + floor * 5;
+          gold += loot;
+          show.adjustSponsor(f.sponsorIndex, -50);
+          if (roll < 0.35) {
+            _applyStatus(player, Status.embarrassed, events);
+            text = "Vous empochez $loot pièces... et le sponsor vous maudit. Vous vous sentez soudain très gêné.";
+          } else {
+            text = 'Vous empochez $loot pièces. ${show.sponsors[f.sponsorIndex].def.name} prend note. Ils notent tout.';
+          }
+        case (FeatureKind.vending, 0):
+          if (gold < 15) {
+            text = "Monnaie insuffisante. Le distributeur affiche « PAUVRE » en lettres rouges.";
+            close = false;
+            use = false;
+          } else {
+            gold -= 15;
+            if (!_addToBag(healPotion)) floorItems.add(FloorItem.item(healPotion, player.pos));
+            text = 'Clonk. Une potion de soin tombe. Elle est tiède. Elle a un goût de pièce.';
+            use = false;
+          }
+        case (FeatureKind.vending, _):
+          if (roll < 0.45) {
+            final it = rollItem(rng, rollRarity(rng, const [60, 35, 5, 0]), floor);
+            floorItems.add(FloorItem.item(it, player.pos));
+            text = 'Vous secouez la machine. Un objet tombe à vos pieds : ${nameOf(it)} !';
+          } else if (roll < 0.75) {
+            text = 'Vous secouez, secouez... rien. Le distributeur vous regarde avec mépris.';
+            use = false;
+          } else {
+            final dmg = 6 + floor;
+            player.hp -= dmg;
+            events.add(StatusDamageEvent(player.id, player.pos, dmg, Status.stun.index));
+            text = 'La machine bascule et vous tombe dessus (-$dmg) ! Elle est cassée. Vous aussi, un peu.';
+            if (player.hp <= 0) _playerDown('un distributeur automatique', events);
+          }
+        default: // bouche de la vérité
+          if (roll < 0.55) {
+            _gainBox(BoxTier.argent, 'Bouche de la vérité', events);
+            text = 'Vous retirez votre main... avec une loot box ! Vous êtes donc honnête. Personne ne le croyait.';
+          } else {
+            final dmg = (player.maxHp * 0.25).ceil();
+            player.hp = (player.hp - dmg).clamp(1, player.maxHp);
+            _applyStatus(player, Status.embarrassed, events);
+            text = 'CLAC ! Elle a mordu (-$dmg). Le public conclut que vous êtes un menteur.';
+          }
+      }
+    }
+    if (use) f.used = true;
+    if (close) activeFeature = null;
+    show.onEvents(events, turn);
+    _checkAchievements(events);
+    return FeatureResult(text, events, closed: close);
   }
 
   // ================================================================ le show
@@ -467,12 +755,15 @@ class Game {
       if (_mimicThisFloor) When.mimic,
       if (floor >= 4) When.deep,
       if (player.hpRatio < 0.6) When.wounded,
+      if (_fellRecently) When.fell,
+      if (_prayedThisFloor) When.prayed,
     };
+    _fellRecently = false;
     final count = floor < 3 ? 2 : 3;
     final picked = <int>[];
     // Les événements marquants de l'étage passent avant les états généraux.
     const priority = [
-      When.poisoned, When.mimic, When.lowHp, When.killer, When.pacifist, //
+      When.fell, When.prayed, When.poisoned, When.mimic, When.lowHp, When.killer, When.pacifist, //
       When.rich, When.broke, When.wounded, When.deep,
     ];
     for (final w in priority) {
@@ -528,6 +819,33 @@ class Game {
 
   /// Répond à la question en cours de l'interview.
   AnswerResult? answer(int index) {
+    final r = _answer(index);
+    if (r != null) commands.add('a:$index');
+    return r;
+  }
+
+  bool buy(int index) => _rec(_buy(index), 'b:$index');
+  bool healAtInfirmary() => _rec(_healAtInfirmary(), 'h');
+  bool pickTalent(int index) => _rec(_pickTalent(index), 't:$index');
+
+  List<GameEvent> leaveBackstage() {
+    final e = _leaveBackstage();
+    if (e.isNotEmpty) commands.add('l');
+    return e;
+  }
+
+  BoxResult? openBox() {
+    final r = _openBox();
+    if (r != null) commands.add('o');
+    return r;
+  }
+
+  bool _rec(bool ok, String cmd) {
+    if (ok) commands.add(cmd);
+    return ok;
+  }
+
+  AnswerResult? _answer(int index) {
     final b = backstage;
     final q = b?.question;
     if (b == null || q == null || index < 0 || index >= q.answers.length) return null;
@@ -551,7 +869,7 @@ class Game {
     return r;
   }
 
-  bool buy(int index) {
+  bool _buy(int index) {
     final b = backstage;
     if (b == null || index < 0 || index >= b.shop.length) return false;
     final o = b.shop[index];
@@ -564,7 +882,7 @@ class Game {
     return true;
   }
 
-  bool healAtInfirmary() {
+  bool _healAtInfirmary() {
     final b = backstage;
     if (b == null || b.healed || gold < b.healPrice || player.hp >= player.maxHp) return false;
     gold -= b.healPrice;
@@ -573,7 +891,7 @@ class Game {
     return true;
   }
 
-  bool pickTalent(int index) {
+  bool _pickTalent(int index) {
     final b = backstage;
     if (b == null || b.talentPicked || index < 0 || index >= b.talents.length) return false;
     final t = b.talents[index];
@@ -608,7 +926,7 @@ class Game {
   }
 
   /// Retour en scène : étage suivant.
-  List<GameEvent> leaveBackstage() {
+  List<GameEvent> _leaveBackstage() {
     if (backstage == null) return const [];
     backstage = null;
     final events = <GameEvent>[];
@@ -620,7 +938,7 @@ class Game {
   // ================================================================ loot boxes
 
   /// Ouvre la prochaine loot box en attente (ne consomme pas de tour).
-  BoxResult? openBox() {
+  BoxResult? _openBox() {
     if (pendingBoxes.isEmpty || gameOver) return null;
     final tier = pendingBoxes.removeAt(0);
     final items = <ItemDef>[];
@@ -644,15 +962,20 @@ class Game {
   /// Le candidat quitte l'émission en cours de run.
   void abandon() {
     if (gameOver) return;
+    commands.add('X');
     gameOver = true;
     killedBy = "l'abandon (le public n'oubliera pas)";
   }
 
   /// Outil de développement : donne une loot box sans condition.
-  void debugGrantBox(BoxTier tier) => pendingBoxes.add(tier);
+  void debugGrantBox(BoxTier tier) {
+    commands.add('G:${tier.index}');
+    pendingBoxes.add(tier);
+  }
 
   /// Outil de développement : place le joueur sur l'escalier.
   void debugToStairs() {
+    commands.add('S');
     monsters.removeWhere((m) => m.pos == level.stairs);
     player.pos = level.stairs;
     _updateFov();
@@ -785,6 +1108,28 @@ class Game {
         }
         events.add(MessageEvent("BOUM ! Une pluie de confettis s'abat sur $hit monstre(s).", MessageKind.good));
         show.addHype(6);
+      case Effect.remote:
+        final spots = [
+          for (final p in level.stairs.neighbors4) if (isFree(p)) p,
+          if (!bossAlive && isFree(level.stairs)) level.stairs,
+        ];
+        if (spots.isNotEmpty) {
+          final dest = spots.last;
+          events.add(MoveEvent(player.id, player.pos, dest));
+          player.pos = dest;
+        }
+        events.add(const MessageEvent('ZAP ! Vous changez de chaîne et atterrissez près de la sortie.',
+            MessageKind.good));
+      case Effect.whistle:
+        var n = 0;
+        for (final m in monsters) {
+          if (m.pos.isAdjacent4(player.pos) && !m.disguised) {
+            _applyStatus(m, Status.stun, events);
+            m.statuses[Status.stun] = 3;
+            n++;
+          }
+        }
+        events.add(MessageEvent('PRRRRT ! Carton rouge pour $n monstre(s).', MessageKind.good));
       case Effect.rage:
         rageTurns = 12;
         events.add(const MessageEvent('RAAAAH ! Dégâts doublés pendant 12 tours.', MessageKind.good));
@@ -817,6 +1162,13 @@ class Game {
     _secondWindUsed = false;
     _poisonedThisFloor = false;
     _mimicThisFloor = false;
+    _prayedThisFloor = false;
+    features.clear();
+    traps.clear();
+    activeFeature = null;
+    // Un étage sur trois environ (à partir du 2) a un modificateur.
+    floorMod = floor >= 2 && rng.chance(0.35) ? rng.pick(FloorMod.values) : null;
+    if (floorMod == FloorMod.shortEpisode) floorTimer = (floorTimer - 40).clamp(60, 9999);
     _minHpRatioFloor = player.hpRatio;
     _floorWalkable = {
       for (var y = 0; y < level.height; y++)
@@ -825,12 +1177,19 @@ class Game {
     };
     _spawnMonsters();
     _spawnLoot();
+    _spawnFeatures();
+    _applyFloorMod();
     _updateFov();
     events.add(FloorEvent(floor));
     if (floor > 1 && (floor - 1) % 3 == 0) {
       events.add(MessageEvent(theme.intro, MessageKind.maestro));
     } else if (floor > 1) {
       _say(MaestroLines.newFloor, events);
+    }
+    final mod = floorMod;
+    if (mod != null) {
+      events.add(FloorModEvent(mod.index));
+      events.add(MessageEvent('${mod.label.toUpperCase()} ! ${mod.announce}', MessageKind.maestro));
     }
   }
 
@@ -927,7 +1286,8 @@ class Game {
     for (final it in itemsAt(player.pos).toList()) {
       if (it.item == null) {
         floorItems.remove(it);
-        final amount = has('pickpocket') ? (it.gold * 1.5).round() : it.gold;
+        var amount = has('pickpocket') ? (it.gold * 1.5).round() : it.gold;
+        if (floorMod == FloorMod.shortEpisode) amount = (amount * 1.5).round();
         gold += amount;
         events.add(PickupEvent(it.pos, '+$amount or'));
         events.add(GoldEvent(amount));
@@ -1124,7 +1484,17 @@ class Game {
     } else if (rng.chance(0.25)) {
       floorItems.add(FloorItem.gold(rng.range(2, 6) + floor, victim.pos));
     }
-    _gainXp(victim.monster!.xp + floor - 1, events);
+    if (victim.elite) {
+      _gainBox(BoxTier.or, 'Monstre vedette', events);
+      floorItems.add(FloorItem.gold(15 + floor * 4, victim.pos));
+      events.add(const MessageEvent('La vedette est tombée ! Son agent est inconsolable.', MessageKind.good));
+    } else if (!victim.isBoss && kills > 1 && rng.chance(0.12)) {
+      _say(MaestroLines.killQuips, events);
+    }
+    var gained = victim.monster!.xp + floor - 1;
+    if (victim.elite) gained *= 3;
+    if (floorMod == FloorMod.doubleXp) gained *= 2;
+    _gainXp(gained, events);
   }
 
   void _bossDefeated(Actor b, List<GameEvent> events) {
@@ -1265,7 +1635,7 @@ class Game {
   void _updateFov() {
     visible = computeFov(
       player.pos,
-      fovRadius,
+      sightRadius,
       (p) => level.tiles[p].blocksSight,
       level.tiles.inBounds,
     );
@@ -1288,10 +1658,105 @@ class Game {
         .replaceAll('{floor}', '$floor')
         .replaceAll('{monster}', monster ?? 'monstre');
     extra.forEach((k, v) => text = text.replaceAll('{$k}', v));
+    _lastMaestroTurn = turn;
     events.add(MessageEvent(text, MessageKind.maestro));
   }
 
   String _the(Actor a) => a.isPlayer ? 'vous' : a.monster!.theName;
 
   String _cap(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+  // ================================================================ sauvegarde
+
+  /// Version du format de sauvegarde. À incrémenter dès que le moteur change de façon
+  /// à rendre un ancien journal impossible à rejouer à l'identique.
+  static const saveVersion = 2;
+
+  static String _encode(PlayerAction a) => switch (a) {
+        MoveAction(:final dir) => 'm${dir.index}',
+        WaitAction() => 'w',
+        DescendAction() => 'd',
+        QuaffAction() => 'q',
+        UseItemAction(:final itemId) => 'u:$itemId',
+        EquipAction(:final itemId) => 'e:$itemId',
+        UnequipAction(:final slot) => 'x:${slot.index}',
+        DropAction(:final itemId) => 'r:$itemId',
+      };
+
+  Map<String, Object?> toSave() => {
+        'v': saveVersion,
+        'seed': seed,
+        'role': setup.roleId,
+        'upgrades': setup.upgrades,
+        'daily': setup.daily,
+        'cmds': commands.join(';'),
+        // Pour l'écran titre, sans avoir à rejouer.
+        'floor': floor,
+        'turn': turn,
+      };
+
+  /// Reconstruit une run en rejouant son journal. Null si la sauvegarde est illisible ou
+  /// date d'une version incompatible du moteur.
+  static Game? fromSave(Map<String, Object?> j) {
+    try {
+      if (j['v'] != saveVersion) return null;
+      final ups = <String, int>{};
+      (j['upgrades'] as Map?)?.forEach((k, v) => ups[k as String] = (v as num).toInt());
+      final g = Game.newRun(
+        (j['seed'] as num).toInt(),
+        setup: RunSetup(roleId: j['role'] as String? ?? 'lambda', upgrades: ups, daily: j['daily'] as bool? ?? false),
+      );
+      final raw = j['cmds'] as String? ?? '';
+      for (final c in raw.isEmpty ? const <String>[] : raw.split(';')) {
+        g._replay(c);
+      }
+      return g;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _replay(String c) {
+    final arg = c.length > 2 && c[1] == ':' ? c.substring(2) : '';
+    switch (c[0]) {
+      case 'm':
+        act(MoveAction(Dir.values[int.parse(c.substring(1))]));
+      case 'w':
+        act(const WaitAction());
+      case 'd':
+        act(const DescendAction());
+      case 'q':
+        act(const QuaffAction());
+      case 'u':
+        act(UseItemAction(arg));
+      case 'e':
+        act(EquipAction(arg));
+      case 'x':
+        act(UnequipAction(ItemKind.values[int.parse(arg)]));
+      case 'r':
+        act(DropAction(arg));
+      case 'a':
+        answer(int.parse(arg));
+      case 'b':
+        buy(int.parse(arg));
+      case 'h':
+        healAtInfirmary();
+      case 't':
+        pickTalent(int.parse(arg));
+      case 'l':
+        leaveBackstage();
+      case 'o':
+        openBox();
+      case 'f':
+        chooseFeature(int.parse(arg));
+      case 'X':
+        abandon();
+      case 'G':
+        debugGrantBox(BoxTier.values[int.parse(arg)]);
+      case 'S':
+        debugToStairs();
+      default:
+        throw FormatException('Commande inconnue : $c');
+    }
+  }
 }

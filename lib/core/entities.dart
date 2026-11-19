@@ -1,3 +1,4 @@
+import '../content/features.dart';
 import '../content/items.dart';
 import '../content/monsters.dart';
 import '../content/status.dart';
@@ -47,6 +48,9 @@ class Actor {
   /// Compteur d'invocation des boss.
   int summonTimer = 0;
 
+  /// Monstre vedette (modificateur d'étage) : doré, plus fort, mieux payé.
+  bool elite = false;
+
   bool hasStatus(Status s) => statuses.containsKey(s);
   bool get isBoss => monster?.boss ?? false;
 
@@ -73,6 +77,25 @@ class Chest {
   Chest(this.pos, this.tier);
   final Pos pos;
   final BoxTier tier;
+}
+
+/// Lieu interactif (fontaine, autel, distributeur…).
+class Feature {
+  Feature(this.pos, this.kind, {this.sponsorIndex = 0});
+  final Pos pos;
+  final FeatureKind kind;
+
+  /// Sponsor honoré par un autel.
+  final int sponsorIndex;
+  bool used = false;
+}
+
+/// Piège caché.
+class Trap {
+  Trap(this.pos, this.kind);
+  final Pos pos;
+  final TrapKind kind;
+  bool revealed = false;
 }
 
 /// Pile d'objets dans le sac.

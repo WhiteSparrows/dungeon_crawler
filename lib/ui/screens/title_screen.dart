@@ -18,9 +18,62 @@ class TitleScreen extends StatelessWidget {
 
   static const _cast = [Sprites.rat, Sprites.bat, Sprites.maestro, Sprites.slime, Sprites.spider];
 
-  void _play(BuildContext context, {bool daily = false}) => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => GameScreen(atlas: atlas, store: store, daily: daily)),
+  /// Nouvelle partie. S'il y en a une en cours, elle est d'abord abandonnée (après confirmation).
+  Future<void> _play(BuildContext context, {bool daily = false}) async {
+    if (store.hasSavedRun) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Palette.panel,
+          shape: const RoundedRectangleBorder(side: BorderSide(color: Palette.hp, width: 2)),
+          title: Text('PARTIE EN COURS', style: pixel(11, color: Palette.hp)),
+          content: const Text(
+            "Une partie est en pause. En lancer une nouvelle l'abandonne (vous touchez ses droits d'auteur).\n\n"
+            "MAESTRO : « Zapper sa propre émission. Audacieux. »",
+            style: TextStyle(color: Palette.text, height: 1.4),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('ANNULER', style: pixel(8))),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Palette.hp, shape: const RoundedRectangleBorder()),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text('ABANDONNER', style: pixel(8, color: Palette.text)),
+            ),
+          ],
+        ),
       );
+      if (ok != true) return;
+      await store.abandonSavedRun();
+    }
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => GameScreen(atlas: atlas, store: store, daily: daily)),
+    );
+  }
+
+  /// Reprend la partie en pause (le journal est rejoué, ce qui peut prendre un instant).
+  Future<void> _resume(BuildContext context) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Center(child: Text('RETOUR EN DIRECT...', style: pixel(10, color: Palette.gold))),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    final game = store.loadRun();
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
+    if (game == null) {
+      await store.clearRun();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Cette sauvegarde date d'une ancienne version du jeu et ne peut pas être reprise."),
+      ));
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => GameScreen(atlas: atlas, store: store, resume: game)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,9 +122,32 @@ class TitleScreen extends StatelessWidget {
                       style: const TextStyle(color: Palette.muted, height: 1.5),
                     ),
                     const SizedBox(height: 22),
+                    if (store.hasSavedRun) ...[
+                      _MenuButton(
+                        primary: true,
+                        onTap: () => _resume(context),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.play_arrow, color: Palette.bg, size: 36),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('REPRENDRE', style: pixel(12, color: Palette.bg)),
+                                  const SizedBox(height: 4),
+                                  Text(_savedLabel(), style: const TextStyle(color: Palette.bg, fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     // Jouer avec le rôle choisi
                     _MenuButton(
-                      primary: true,
+                      primary: !store.hasSavedRun,
                       onTap: () => _play(context),
                       child: Row(
                         children: [
@@ -81,9 +157,11 @@ class TitleScreen extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('ENTRER EN SCENE', style: pixel(12, color: Palette.bg)),
+                                Text(store.hasSavedRun ? 'NOUVELLE PARTIE' : 'ENTRER EN SCENE',
+                                    style: pixel(12, color: store.hasSavedRun ? Palette.text : Palette.bg)),
                                 const SizedBox(height: 4),
-                                Text(role.name, style: const TextStyle(color: Palette.bg, fontSize: 13)),
+                                Text(role.name,
+                                    style: TextStyle(color: store.hasSavedRun ? Palette.muted : Palette.bg, fontSize: 13)),
                               ],
                             ),
                           ),
@@ -161,6 +239,16 @@ class TitleScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+extension on TitleScreen {
+  String _savedLabel() {
+    final info = store.savedRunInfo;
+    if (info == null) return '';
+    final role = roleById(info['role'] as String? ?? 'lambda').name;
+    final daily = info['daily'] == true ? ' · défi du jour' : '';
+    return 'Étage ${info['floor']} · $role$daily';
   }
 }
 

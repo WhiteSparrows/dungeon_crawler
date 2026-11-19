@@ -48,6 +48,24 @@ un animateur cabotin. Objectif : descendre le plus bas possible.
   Certaines armes les infligent, des bagues en immunisent, la potion de soin retire poison et feu,
   le pansement sponsorisé retire tout.
 
+## Variété
+
+- **Lieux interactifs** (marqués d'un « ? ») : fontaine douteuse, autel de sponsor, distributeur
+  automatique, bouche de la vérité. Les frapper ouvre un choix aux conséquences aléatoires.
+- **Pièges cachés** : pics, canon à confettis, projecteur brûlant, trappe (chute à l'étage suivant,
+  sans interview). On les repère parfois en passant à côté ; le déplacement auto évite ceux repérés.
+- **Modificateurs d'étage** (environ 1 étage sur 3) : panne de courant, happy hour, pluie de pièces,
+  double XP, monstre vedette doré (loot box Or), épisode écourté.
+- **MAESTRO bavard** : commentaires spontanés, fausses coupures pub des sponsors, blagues après les
+  éliminations, 24 questions d'interview.
+
+## Sauvegarde
+
+La partie en cours est sauvegardée dès que l'appli passe en arrière-plan, ou avec « Pause » (bouton
+retour). Le menu propose alors « Reprendre ». La sauvegarde stocke la graine et la liste des actions,
+et les rejoue à l'identique. Si le moteur change (`Game.saveVersion`), les anciennes sauvegardes sont
+refusées proprement.
+
 ## Méta-progression (sauvegardée sur l'appareil)
 
 - **Droits d'auteur** gagnés à chaque fin de run (étages, audience record, monstres, succès, bonus

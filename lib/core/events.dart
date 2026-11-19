@@ -146,6 +146,26 @@ class VictoryEvent extends GameEvent {
   const VictoryEvent();
 }
 
+/// Le joueur s'approche d'un lieu interactif : un choix s'ouvre.
+class FeatureEvent extends GameEvent {
+  const FeatureEvent(this.pos);
+  final Pos pos;
+}
+
+/// Un piège se déclenche ou est repéré.
+class TrapEvent extends GameEvent {
+  const TrapEvent(this.pos, this.kindIndex, {this.triggered = true});
+  final Pos pos;
+  final int kindIndex;
+  final bool triggered;
+}
+
+/// Un modificateur d'étage est annoncé.
+class FloorModEvent extends GameEvent {
+  const FloorModEvent(this.modIndex);
+  final int modIndex;
+}
+
 enum MessageKind { info, good, danger, maestro }
 
 class MessageEvent extends GameEvent {

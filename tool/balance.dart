@@ -26,8 +26,16 @@ Result playOne(int seed, RunSetup setup) {
   final g = Game.newRun(seed, setup: setup);
   final r = Rng(seed ^ 0x5bd1e995);
   var viral = 0;
+  var lastTurn = -1;
   for (var i = 0; i < 6000 && !g.gameOver; i++) {
-    if (g.show.hype >= 80) viral++;
+    if (g.show.hype >= 80 && g.turn != lastTurn) viral++;
+    lastTurn = g.turn;
+    final f = g.activeFeature;
+    if (f != null) {
+      final res = g.chooseFeature(r.nextInt(f.kind.options.length));
+      if (!res.closed) g.chooseFeature(f.kind.options.length - 1);
+      continue;
+    }
     // Coulisses : répondre, prendre un talent, se soigner, acheter une potion.
     if (g.backstage != null) {
       while (g.backstage!.question != null) {
@@ -80,7 +88,8 @@ Result playOne(int seed, RunSetup setup) {
       continue;
     }
     final path = findPath(g.level.tiles, g.player.pos, g.level.stairs,
-        (p) => g.level.walkable(p) && g.chestAt(p) == null, allowBlockedGoal: true);
+        (p) => g.level.walkable(p) && g.chestAt(p) == null && g.featureAt(p) == null && !(g.trapAt(p)?.revealed ?? false),
+        allowBlockedGoal: true);
     if (path == null || path.isEmpty) {
       g.act(MoveAction(r.pick(Dir.all)));
       continue;

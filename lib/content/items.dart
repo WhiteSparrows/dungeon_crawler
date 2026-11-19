@@ -30,6 +30,12 @@ enum Effect {
 
   /// Blesse et gêne tous les monstres en vue.
   confetti,
+
+  /// Téléporte près de l'escalier.
+  remote,
+
+  /// Étourdit les monstres au contact.
+  whistle,
 }
 
 class ItemDef {
@@ -391,6 +397,26 @@ const confettiBarrel = ItemDef(
   minFloor: 2,
 );
 
+const remote = ItemDef(
+  id: 'remote',
+  name: 'Télécommande de la régie',
+  desc: "Zappe directement à côté de l'escalier. Volée au réalisateur, qui la cherche encore.",
+  sprite: 74,
+  kind: ItemKind.consumable,
+  rarity: Rarity.rare,
+  effect: Effect.remote,
+  minFloor: 2,
+);
+
+const whistle = ItemDef(
+  id: 'whistle',
+  name: "Sifflet d'arbitre",
+  desc: 'Un coup de sifflet strident : les monstres au contact sont étourdis 2 tours. Carton rouge.',
+  sprite: 56,
+  kind: ItemKind.consumable,
+  effect: Effect.whistle,
+);
+
 /// Fioles mystère : leur nom réel n'apparaît qu'une fois identifiées.
 const mysteryPotions = <ItemDef>[
   ItemDef(
@@ -465,7 +491,16 @@ const potionLooks = <(String, int)>[
   ('Élixir pétillant', 128),
 ];
 
-const allItems = <ItemDef>[...weapons, ...trinkets, healPotion, bandage, confettiBarrel, ...mysteryPotions];
+const allItems = <ItemDef>[
+  ...weapons,
+  ...trinkets,
+  healPotion,
+  bandage,
+  confettiBarrel,
+  remote,
+  whistle,
+  ...mysteryPotions,
+];
 
 ItemDef itemById(String id) => allItems.firstWhere((i) => i.id == id);
 

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../content/achievements.dart';
+import '../../content/features.dart';
 import '../../content/items.dart';
 import '../../content/sprites.dart';
 import '../../core/events.dart';
@@ -18,12 +19,13 @@ import '../render/sprite_atlas.dart';
 import '../theme.dart';
 import 'achievements_screen.dart';
 import 'backstage_screen.dart';
+import 'feature_dialog.dart';
 import 'inventory_sheet.dart';
 import 'regie_sheet.dart';
 import 'loot_box_dialog.dart';
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, required this.atlas, required this.store, this.daily = false});
+  const GameScreen({super.key, required this.atlas, required this.store, this.daily = false, this.resume});
 
   final SpriteAtlas atlas;
   final ProfileStore store;
@@ -31,11 +33,14 @@ class GameScreen extends StatefulWidget {
   /// Défi du jour : graine du jour, rôle de base, aucun contrat.
   final bool daily;
 
+  /// Partie sauvegardée à reprendre (déjà reconstruite).
+  final Game? resume;
+
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
   late GameController c;
   late DungeonPainter painter;
   final _focus = FocusNode();
@@ -46,16 +51,33 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _newRun();
+    WidgetsBinding.instance.addObserver(this);
+    _newRun(resume: widget.resume);
+    // Une partie reprise peut être en pleine interview.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _watchBackstage();
+      _watchFeature();
+    });
+  }
+
+  /// L'appli passe en arrière-plan (appel, autre appli, écran éteint) : on sauvegarde.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) widget.store.saveRun(c.game);
   }
 
   bool _backstageOpen = false;
 
-  void _newRun() {
-    final seed = widget.daily ? dailySeed(DateTime.now()) : DateTime.now().microsecondsSinceEpoch & 0x7fffffff;
-    c = GameController(this, seed, setup: widget.store.profile.setupFor(daily: widget.daily))
-      ..vibrations = widget.store.profile.vibrations;
+  void _newRun({Game? resume}) {
+    if (resume != null) {
+      c = GameController.resume(this, resume);
+    } else {
+      final seed = widget.daily ? dailySeed(DateTime.now()) : DateTime.now().microsecondsSinceEpoch & 0x7fffffff;
+      c = GameController(this, seed, setup: widget.store.profile.setupFor(daily: widget.daily));
+    }
+    c.vibrations = widget.store.profile.vibrations;
     c.addListener(_watchBackstage);
+    c.addListener(_watchFeature);
     c.addListener(_watchGameOver);
     painter = DungeonPainter(c, widget.atlas);
     _summary = null;
@@ -65,38 +87,64 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _watchGameOver() {
     if (!c.game.gameOver || _summary != null) return;
     _summary = widget.store.recordRun(c.game);
+    widget.store.clearRun();
   }
 
   /// Succès connus : ceux du profil plus ceux de la run en cours.
   Set<String> get _allAchievements => {...widget.store.profile.achievements, ...c.game.unlocked};
 
-  /// Quitter en pleine run = abandon (enregistré).
+  /// Quitter en pleine run : pause (sauvegarde) ou abandon (enregistré).
   Future<void> _confirmQuit() async {
-    final quit = await showDialog<bool>(
+    final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Palette.panel,
         shape: const RoundedRectangleBorder(side: BorderSide(color: Palette.hp, width: 2)),
         title: Text("QUITTER L'EMISSION ?", style: pixel(11, color: Palette.hp)),
         content: const Text(
-          "MAESTRO : « Abandonner en direct ? Quelle audace. Quelle lâcheté. "
+          "PAUSE : la partie est sauvegardée, vous la reprendrez depuis le menu.\n\n"
+          "ABANDON : MAESTRO : « Abandonner en direct ? Quelle audace. Quelle lâcheté. "
           "Vous toucherez quand même vos droits d'auteur, on n'est pas des monstres. Enfin si, mais pas ceux-là. »",
           style: TextStyle(color: Palette.text, height: 1.4),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('RESTER', style: pixel(9))),
+          TextButton(onPressed: () => Navigator.of(ctx).pop('stay'), child: Text('RESTER', style: pixel(8))),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(shape: const RoundedRectangleBorder(), side: const BorderSide(color: Palette.gold)),
+            onPressed: () => Navigator.of(ctx).pop('pause'),
+            child: Text('PAUSE', style: pixel(8, color: Palette.gold)),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Palette.hp, shape: const RoundedRectangleBorder()),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('ABANDONNER', style: pixel(9, color: Palette.text)),
+            onPressed: () => Navigator.of(ctx).pop('quit'),
+            child: Text('ABANDON', style: pixel(8, color: Palette.text)),
           ),
         ],
       ),
     );
-    if (quit != true || !mounted) return;
-    c.game.abandon();
-    _watchGameOver();
-    Navigator.of(context).pop();
+    if (!mounted || choice == null || choice == 'stay') return;
+    if (choice == 'pause') {
+      await widget.store.saveRun(c.game);
+    } else {
+      c.game.abandon();
+      _watchGameOver();
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  bool _featureOpen = false;
+
+  /// Le joueur s'approche d'un lieu interactif : dialogue de choix.
+  void _watchFeature() {
+    final f = c.game.activeFeature;
+    if (f == null || _featureOpen) return;
+    _featureOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await FeatureDialog.show(context, c, widget.atlas, f);
+      _featureOpen = false;
+      _focus.requestFocus();
+    });
   }
 
   /// Dès que le joueur quitte l'étage, on ouvre le plateau d'interview.
@@ -130,6 +178,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     c.dispose();
     _focus.dispose();
     super.dispose();
@@ -205,6 +254,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               children: [
                 _Hud(c: c, atlas: widget.atlas, known: _allAchievements),
                 _ShowBar(c: c, onTap: _openRegie),
+                if (c.game.floorMod != null) _ModBanner(mod: c.game.floorMod!),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, box) => Stack(
@@ -437,6 +487,32 @@ class _ShowBar extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------ Modificateur d'étage
+
+class _ModBanner extends StatelessWidget {
+  const _ModBanner({required this.mod});
+
+  final FloorMod mod;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFF2A2010),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Text.rich(
+        TextSpan(children: [
+          TextSpan(text: '${mod.label} : ', style: const TextStyle(color: Palette.gold, fontWeight: FontWeight.bold)),
+          TextSpan(text: mod.desc, style: const TextStyle(color: Palette.text)),
+        ]),
+        style: const TextStyle(fontSize: 12),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }

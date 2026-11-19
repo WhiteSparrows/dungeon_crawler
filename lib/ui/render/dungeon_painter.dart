@@ -7,6 +7,7 @@ import '../../core/entities.dart';
 import '../../core/events.dart';
 import '../../core/grid.dart';
 import '../game_controller.dart';
+import '../theme.dart';
 import 'sprite_atlas.dart';
 
 /// Nombre de tuiles visibles en largeur : règle le zoom.
@@ -117,6 +118,29 @@ class DungeonPainter extends CustomPainter {
     for (final ch in g.chests) {
       drawChest(ch.pos, Sprites.chest);
     }
+    // --- Lieux interactifs
+    for (final f in g.features) {
+      if (!g.explored.contains(f.pos)) continue;
+      final dst = cam.toScreen(f.pos.x.toDouble(), f.pos.y.toDouble()) & Size(ts, ts);
+      final seen = g.visible.contains(f.pos);
+      atlas.draw(canvas, f.kind.sprite, dst, opacity: f.used ? 0.35 : (seen ? 1 : 0.5));
+      if (!f.used && seen) _text(canvas, '?', dst.topCenter + Offset(0, -ts * 0.05), Palette.gold, ts * 0.28);
+    }
+
+    // --- Pièges repérés
+    for (final t in g.traps) {
+      if (!t.revealed || !g.explored.contains(t.pos)) continue;
+      final r = (cam.toScreen(t.pos.x.toDouble(), t.pos.y.toDouble()) & Size(ts, ts)).deflate(ts * 0.22);
+      final color = Color(t.kind.color).withValues(alpha: g.visible.contains(t.pos) ? 0.9 : 0.45);
+      final paint = Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = ts * 0.07;
+      canvas.drawRect(r, paint);
+      canvas.drawLine(r.topLeft, r.bottomRight, paint);
+      canvas.drawLine(r.topRight, r.bottomLeft, paint);
+    }
+
     for (final m in g.monsters) {
       if (!m.disguised) continue;
       drawChest(m.pos, m.displaySprite);
@@ -219,8 +243,12 @@ class DungeonPainter extends CustomPainter {
       // Aura rouge pendant la rage.
       canvas.drawCircle(dst.center, ts * 0.45, Paint()..color = const Color(0x55FF2020));
     }
-    final tint = a.monster?.tint;
+    final tint = a.elite ? 0xFFFFD84D : a.monster?.tint;
+    if (a.elite) {
+      canvas.drawCircle(dst.center, ts * 0.5, Paint()..color = const Color(0x44FFD84D));
+    }
     atlas.draw(canvas, a.displaySprite, dst, flash: flash, tint: tint == null ? null : Color(tint));
+    if (a.elite) _text(canvas, '*', dst.topCenter + Offset(0, -ts * 0.08), const Color(0xFFFFD84D), ts * 0.35);
     if (a.enraged) {
       canvas.drawRect(dst, Paint()..color = const Color(0x22FF0000));
     }

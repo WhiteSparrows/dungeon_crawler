@@ -66,7 +66,7 @@ class Answer {
 }
 
 /// Contexte de la run, pour poser des questions en rapport avec ce qui vient de se passer.
-enum When { always, poisoned, lowHp, killer, pacifist, rich, broke, mimic, deep, wounded }
+enum When { always, poisoned, lowHp, killer, pacifist, rich, broke, mimic, deep, wounded, fell, prayed }
 
 class Question {
   const Question(this.text, this.answers, {this.when = When.always});
@@ -140,7 +140,63 @@ const questions = <Question>[
         hype: 15, extraMonsters: 1, box: BoxTier.bronze),
   ]),
 
+  Question('Votre plat préféré, pour la petite fiche ?', [
+    Answer('La gelée de cantine.', "Cannibalisme culinaire ! La gelée de l'étage 1 a porté plainte.", Crowd.laughs,
+        hype: 12),
+    Answer('Le steak de {s1}.', '{s1} vous offre un an de steaks. Enfin, un steak. Pour un an.', Crowd.applause,
+        sponsor: 1, sponsorDelta: 35),
+    Answer('Je ne mange plus depuis que je vois ce que vous servez.', 'Le traiteur est vexé. Il était dans la salle.',
+        Crowd.gasps, hype: 18),
+  ]),
+  Question("Le public a voté : il veut vous voir combattre avec une main dans le dos. Vous acceptez ?", [
+    Answer('Avec plaisir.', "Formidable ! On vous l'attache... ah non, on n'a pas de corde. Prenez cette loot box.",
+        Crowd.applause, box: BoxTier.bronze, hype: 10),
+    Answer('Le public peut venir le faire lui-même.', 'Le public prend des notes. Quelques monstres aussi.',
+        Crowd.gasps, hype: 20, extraMonsters: 1),
+    Answer('Non.', "Le public est déçu. Le public est toujours déçu. C'est son métier.", Crowd.boos, hype: -10,
+        gold: 20),
+  ]),
+  Question('Une rumeur dit que vous parlez aux monstres avant de les tuer. Vrai ?', [
+    Answer('Je leur lis des poèmes.', 'Le service culture de la chaîne veut vous engager.', Crowd.laughs,
+        hype: 15, viewersPct: 0.05),
+    Answer("Je m'excuse, c'est tout.", "Poli. Inutile, mais poli. La politesse ne rapporte rien ici.", Crowd.silence,
+        healPct: 0.2),
+    Answer('Je leur parle de {s0}.', "Placement de produit en plein combat. {s0} pleure de joie.", Crowd.applause,
+        sponsor: 0, sponsorDelta: 45),
+  ]),
+  Question('On a retrouvé votre journal intime dans votre sac. Je lis un extrait ?', [
+    Answer('Allez-y.', "« Cher journal, aujourd'hui un rat m'a mordu et j'ai pleuré. » Magnifique. Diffusé.",
+        Crowd.laughs, hype: 25, viewersPct: 0.1),
+    Answer('Je vous paie pour ne pas le faire.', 'Accepté. Je le lirai quand même la semaine prochaine.', Crowd.boos,
+        gold: -30, hype: -5),
+    Answer("Ce n'est pas mon journal.", "Il y a votre nom dessus. Et votre sang. Le public adore le mensonge.",
+        Crowd.gasps, hype: 15),
+  ]),
+  Question('Dernière question, rapide : chat ou chien ?', [
+    Answer('Chat.', 'Le public est divisé. Une émeute éclate dans les gradins. Merci.', Crowd.gasps, hype: 20),
+    Answer('Chien.', 'Le public est divisé. Une émeute éclate dans les gradins. Merci aussi.', Crowd.gasps, hype: 20),
+    Answer('Gelée de cantine.', "Réponse inattendue. Le comité de sélection vous offre un petit quelque chose.",
+        Crowd.laughs, box: BoxTier.bronze),
+  ]),
+
   // ---------------------------------------------------------------- en contexte
+  Question("Vous êtes tombé dans une trappe et avez sauté notre interview précédente. C'était volontaire ?",
+      when: When.fell, [
+    Answer('Totalement.', "Esquiver MAESTRO ? Personne n'esquive MAESTRO. Prochain étage plus court.", Crowd.gasps,
+        hype: 20, timerDelta: -20),
+    Answer('Non, je suis maladroit.', "Maladroit et vivant. La meilleure combinaison pour l'audimat.", Crowd.laughs,
+        hype: 15),
+    Answer("Vous m'avez manqué.", "Oh. Je... Coupez. COUPEZ. Donnez-lui une loot box, vite.", Crowd.applause,
+        box: BoxTier.argent),
+  ]),
+  Question("Nos caméras vous ont vu prier devant un autel de sponsor. Vous êtes croyant ?", when: When.prayed, [
+    Answer('Je crois en {s0}.', '{s0} vous croit aussi. Un peu. Contre rémunération.', Crowd.applause,
+        sponsor: 0, sponsorDelta: 40),
+    Answer('Je crois en moi.', 'Courageux. Statistiquement faux, mais courageux.', Crowd.laughs, hype: 15),
+    Answer('Je crois en rien, je voulais la loot box.', "L'honnêteté ! Ça ne se voit jamais ici. Le public est sous le choc.",
+        Crowd.gasps, hype: 25),
+  ]),
+
   Question("Vous avez bu du poison tout à l'heure. Vous recommandez ?", when: When.poisoned, [
     Answer('Arôme fruité, finale amère.', "Un vrai sommelier ! {s0} veut vous signer.", Crowd.laughs,
         sponsor: 0, sponsorDelta: 45, hype: 10),
