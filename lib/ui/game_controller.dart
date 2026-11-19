@@ -5,8 +5,10 @@ import 'package:flutter/services.dart';
 
 import '../content/achievements.dart';
 import '../content/features.dart';
+import 'audio.dart';
 import '../content/items.dart';
 import '../content/status.dart';
+import '../content/interviews.dart';
 import '../core/backstage.dart';
 import '../core/events.dart';
 import '../core/game.dart';
@@ -175,6 +177,14 @@ class GameController extends ChangeNotifier {
   AnswerResult? answer(int index) {
     final r = game.answer(index);
     if (r != null) {
+      final crowd = switch (r.crowd) {
+        Crowd.applause => Sfx.applause,
+        Crowd.laughs => Sfx.laugh,
+        Crowd.boos => Sfx.boo,
+        Crowd.gasps => Sfx.door,
+        Crowd.silence => null,
+      };
+      if (crowd != null) GameAudio.instance.play(crowd);
       log.add(LogLine('Interview : « ${r.answerText} » — ${r.crowd.label}', MessageKind.maestro));
       notifyListeners();
     }
@@ -324,6 +334,7 @@ class GameController extends ChangeNotifier {
   // --------------------------------------------------------------- événements → effets
 
   void _ingest(List<GameEvent> events) {
+    _sounds(events);
     for (final e in events) {
       switch (e) {
         case AttackEvent():
@@ -409,6 +420,56 @@ class GameController extends ChangeNotifier {
         case RevealEvent():
           floaters.add(Floater('!!!', e.pos.x.toDouble(), e.pos.y.toDouble() - 0.4, const Color(0xFFFF5050), nowMs,
               big: true));
+        default:
+          break;
+      }
+    }
+  }
+
+  // --------------------------------------------------------------- sons
+
+  /// Un son par type d'événement et par tour (évite la cacophonie).
+  void _sounds(List<GameEvent> events) {
+    final played = <Sfx>{};
+    void p(Sfx s) {
+      if (played.add(s)) GameAudio.instance.play(s);
+    }
+
+    for (final e in events) {
+      switch (e) {
+        case AttackEvent(:final attackerId, :final targetId, :final miss, :final crit):
+          if (miss) break;
+          if (targetId == game.player.id) {
+            p(Sfx.hurt);
+          } else if (attackerId == game.player.id) {
+            p(crit ? Sfx.crit : Sfx.hit);
+          }
+        case DeathEvent(:final isPlayer):
+          p(isPlayer ? Sfx.death : Sfx.kill);
+        case PickupEvent(:final label):
+          if (!label.startsWith('-')) p(label.contains('or') ? Sfx.coin : Sfx.pickup);
+        case ItemUsedEvent():
+          p(Sfx.potion);
+        case LevelUpEvent():
+          p(Sfx.levelup);
+        case AchievementEvent():
+          p(Sfx.achievement);
+        case BoxGainedEvent() || SponsorGiftEvent():
+          p(Sfx.boxGained);
+        case BossEvent(:final defeated):
+          p(defeated ? Sfx.applause : Sfx.boss);
+        case VictoryEvent():
+          p(Sfx.victory);
+        case TrapEvent(:final triggered):
+          p(triggered ? Sfx.trap : Sfx.click);
+        case FloorEvent():
+          if (game.floor > 1) p(Sfx.stairs);
+        case RevealEvent() || FeatureEvent():
+          p(Sfx.door);
+        case DemolitionEvent() || StatusDamageEvent():
+          p(Sfx.hurt);
+        case TwistEvent():
+          p(Sfx.boss);
         default:
           break;
       }

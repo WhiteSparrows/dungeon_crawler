@@ -7,6 +7,7 @@ import '../../content/sprites.dart';
 import '../../core/game.dart';
 import '../game_controller.dart';
 import '../render/sprite_atlas.dart';
+import '../audio.dart';
 import '../theme.dart';
 
 /// Ouverture d'une loot box : la boîte tremble, on tape, elle explose, le butin apparaît.
@@ -50,6 +51,7 @@ class _LootBoxDialogState extends State<LootBoxDialog> with TickerProviderStateM
 
   void _open() {
     if (result != null) return;
+    GameAudio.instance.play(Sfx.lootbox);
     setState(() => result = widget.c.openBox());
     _burst.forward(from: 0);
   }

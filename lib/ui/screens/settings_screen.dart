@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../meta/profile_store.dart';
+import '../audio.dart';
 import '../theme.dart';
 
 /// Réglages : vibrations, croix directionnelle, remise à zéro.
@@ -60,6 +61,24 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 _toggle(
+                  'Musique',
+                  'Boucles chiptune du donjon et du plateau.',
+                  p.music,
+                  (on) {
+                    store.setMusic(on);
+                    GameAudio.instance.setMusicOn(on);
+                  },
+                ),
+                _toggle(
+                  'Effets sonores',
+                  'Coups, loot box, public en délire, trombone triste.',
+                  p.soundFx,
+                  (on) {
+                    store.setSoundFx(on);
+                    GameAudio.instance.sfxOn = on;
+                  },
+                ),
+                _toggle(
                   'Vibrations',
                   'Coups reçus, éliminations, boss, montées de niveau.',
                   p.vibrations,
@@ -89,7 +108,8 @@ class SettingsScreen extends StatelessWidget {
                 const Padding(
                   padding: EdgeInsets.only(left: 12),
                   child: Text(
-                    'Donjon en Direct\nSprites : Tiny Dungeon par Kenney (CC0)\nPolice : Press Start 2P (SIL OFL)',
+                    'Donjon en Direct\nSprites : Tiny Dungeon par Kenney (CC0)\nPolice : Press Start 2P (SIL OFL)\n'
+                    'Sons et musiques : synthétisés pour le jeu (tool/make_sounds.py)',
                     style: TextStyle(color: Palette.muted, fontSize: 12, height: 1.5),
                   ),
                 ),

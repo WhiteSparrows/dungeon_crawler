@@ -59,6 +59,12 @@ un animateur cabotin. Objectif : descendre le plus bas possible.
 - **MAESTRO bavard** : commentaires spontanés, fausses coupures pub des sponsors, blagues après les
   éliminations, 24 questions d'interview.
 
+## Sons et musique
+
+Bruitages et deux boucles chiptune (donjon, plateau) synthétisés pour le jeu par
+`python tool/make_sounds.py` (aucune dépendance, écrit dans `assets/audio/`). Musique et effets se
+coupent séparément dans les réglages ; tout se met en pause quand l'appli passe en arrière-plan.
+
 ## Sauvegarde
 
 La partie en cours est sauvegardée dès que l'appli passe en arrière-plan, ou avec « Pause » (bouton
@@ -119,3 +125,4 @@ pour l'installer soi-même, pas pour le Play Store).
 
 - Sprites : [Tiny Dungeon](https://kenney.nl/assets/tiny-dungeon) par Kenney (CC0).
 - Police : Press Start 2P par CodeMan38 (SIL OFL).
+- Sons et musiques : synthétisés pour ce projet (`tool/make_sounds.py`).

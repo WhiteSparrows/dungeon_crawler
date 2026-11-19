@@ -16,6 +16,7 @@ import '../../core/show.dart';
 import '../game_controller.dart';
 import '../render/dungeon_painter.dart';
 import '../render/sprite_atlas.dart';
+import '../audio.dart';
 import '../theme.dart';
 import 'achievements_screen.dart';
 import 'backstage_screen.dart';
@@ -52,6 +53,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    GameAudio.instance.music(Music.dungeon);
     _newRun(resume: widget.resume);
     // Une partie reprise peut être en pleine interview.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -153,6 +155,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     _backstageOpen = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      GameAudio.instance
+        ..play(Sfx.jingle)
+        ..music(Music.show);
       await Navigator.of(context).push(
         PageRouteBuilder<void>(
           pageBuilder: (_, _, _) => BackstageScreen(c: c, atlas: widget.atlas),
@@ -161,6 +166,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         ),
       );
       _backstageOpen = false;
+      GameAudio.instance.music(Music.dungeon);
       _focus.requestFocus();
     });
   }
@@ -178,6 +184,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
 
   @override
   void dispose() {
+    GameAudio.instance.music(Music.show);
     WidgetsBinding.instance.removeObserver(this);
     c.dispose();
     _focus.dispose();

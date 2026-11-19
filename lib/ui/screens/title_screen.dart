@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../content/roles.dart';
 import '../../content/sprites.dart';
 import '../../meta/profile_store.dart';
+import '../audio.dart';
 import '../render/sprite_atlas.dart';
 import '../theme.dart';
 import 'achievements_screen.dart';
@@ -77,6 +78,7 @@ class TitleScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    GameAudio.instance.music(Music.show);
     return Scaffold(
       body: SafeArea(
         child: ListenableBuilder(

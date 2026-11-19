@@ -92,6 +92,8 @@ class Profile {
   // Réglages
   bool vibrations = true;
   bool dpad = false;
+  bool soundFx = true;
+  bool music = true;
 
   // Défi du jour
   String dailyDate = '';
@@ -226,6 +228,8 @@ class Profile {
         'dailyAttempts': dailyAttempts,
         'vibrations': vibrations,
         'dpad': dpad,
+        'sfx': soundFx,
+        'music': music,
       };
 
   factory Profile.fromJson(Map<String, Object?> j) {
@@ -241,7 +245,9 @@ class Profile {
       ..dailyBestFloor = (j['dailyBestFloor'] as num?)?.toInt() ?? 0
       ..dailyAttempts = (j['dailyAttempts'] as num?)?.toInt() ?? 0
       ..vibrations = j['vibrations'] as bool? ?? true
-      ..dpad = j['dpad'] as bool? ?? false;
+      ..dpad = j['dpad'] as bool? ?? false
+      ..soundFx = j['sfx'] as bool? ?? true
+      ..music = j['music'] as bool? ?? true;
     p.achievements.addAll((j['achievements'] as List?)?.cast<String>() ?? const []);
     p.roles.addAll((j['roles'] as List?)?.cast<String>() ?? const []);
     final ups = j['upgrades'] as Map?;

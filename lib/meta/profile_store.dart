@@ -99,6 +99,16 @@ class ProfileStore extends ChangeNotifier {
     _save();
   }
 
+  void setSoundFx(bool on) {
+    profile.soundFx = on;
+    _save();
+  }
+
+  void setMusic(bool on) {
+    profile.music = on;
+    _save();
+  }
+
   void setDpad(bool on) {
     profile.dpad = on;
     _save();
@@ -109,7 +119,9 @@ class ProfileStore extends ChangeNotifier {
     final keep = profile;
     profile = Profile()
       ..vibrations = keep.vibrations
-      ..dpad = keep.dpad;
+      ..dpad = keep.dpad
+      ..soundFx = keep.soundFx
+      ..music = keep.music;
     _save();
   }
 
