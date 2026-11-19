@@ -85,6 +85,17 @@ abstract final class MaestroLines {
     "Coup parfait. Les juges donnent 9,5. Le jury d'outre-tombe donne 2.",
   ];
 
+  static const kamikaze = [
+    "Oh oh. {monster} gonfle à vue d'œil. Je recule la caméra, par précaution.",
+    "{monster} commence à fumer. Ce n'est jamais bon signe quand un monstre fume.",
+  ];
+
+  static const skillUsed = [
+    "Et voilà le numéro signature ! Le public connaît la chorégraphie par cœur.",
+    "Ah, la compétence spéciale ! Nos juristes rappellent qu'elle n'est pas brevetée. Pour l'instant.",
+    "Le public scande votre nom ! Enfin, un nom. Probablement le vôtre.",
+  ];
+
   static const trapFall = [
     "La trappe s'ouvre ! Notre candidat descend un étage par la méthode express. Pas d'interview, pas de bisous.",
   ];

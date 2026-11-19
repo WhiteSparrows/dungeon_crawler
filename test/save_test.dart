@@ -22,6 +22,7 @@ String signature(Game g) => [
       g.xp,
       g.playerLevel,
       g.weapon?.id,
+      g.skillCooldown,
       g.trinket?.id,
       [for (final i in g.inventory) '${i.def.id}x${i.count}'].join(','),
       [for (final m in g.monsters) '${m.monster!.id}@${m.pos}:${m.hp}'].join(','),
@@ -58,7 +59,9 @@ void play(Game g, Rng r, int steps) {
     for (final inv in List<InvItem>.of(g.inventory)) {
       if (inv.def.equippable && r.chance(0.5)) g.act(EquipAction(inv.def.id));
     }
-    if (g.player.hpRatio < 0.4 && g.healPotions > 0) {
+    if (g.skillReady && r.chance(0.15)) {
+      g.act(const SkillAction());
+    } else if (g.player.hpRatio < 0.4 && g.healPotions > 0) {
       g.act(const QuaffAction());
     } else if (g.onStairs && r.chance(0.8)) {
       g.act(const DescendAction());
@@ -107,7 +110,7 @@ void main() {
     final loaded = Game.fromSave(g.toSave())!;
     expect(loaded.setup.daily, isTrue);
     expect(loaded.gameOver, isTrue);
-    expect(loaded.killedBy, contains('abandon'));
+    expect(loaded.killedBy, g.killedBy);
   });
 
   test('magasin : sauvegarder, reprendre, abandonner pour une nouvelle partie', () async {

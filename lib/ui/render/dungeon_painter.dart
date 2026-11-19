@@ -173,6 +173,18 @@ class DungeonPainter extends CustomPainter {
       _drawActor(canvas, cam, g.player, t);
     }
 
+    // --- Projectiles des tireurs
+    if (t < 1) {
+      for (final e in c.turnEvents) {
+        if (e is! AttackEvent || !e.ranged) continue;
+        final k = easeMove(t);
+        final x = e.from.x + (e.to.x - e.from.x) * k, y = e.from.y + (e.to.y - e.from.y) * k;
+        final center = cam.toScreen(x, y) + Offset(ts / 2, ts / 2);
+        canvas.drawCircle(center, ts * 0.12, Paint()..color = const Color(0xFF000000));
+        canvas.drawCircle(center, ts * 0.09, Paint()..color = const Color(0xFFFFE070));
+      }
+    }
+
     // --- Textes flottants
     for (final f in c.floaters) {
       final age = (c.nowMs - f.bornMs) / GameController.floaterMs;
@@ -211,7 +223,7 @@ class DungeonPainter extends CustomPainter {
     Color? flash;
     for (final e in c.turnEvents) {
       if (e is AttackEvent) {
-        if (e.attackerId == a.id && t < 1) {
+        if (e.attackerId == a.id && t < 1 && !e.ranged) {
           // Petit « bump » vers la cible.
           final k = math.sin(t * math.pi) * 0.35;
           pos += Offset((e.to.x - e.from.x) * k, (e.to.y - e.from.y) * k);
@@ -249,6 +261,11 @@ class DungeonPainter extends CustomPainter {
     }
     atlas.draw(canvas, a.displaySprite, dst, flash: flash, tint: tint == null ? null : Color(tint));
     if (a.elite) _text(canvas, '*', dst.topCenter + Offset(0, -ts * 0.08), const Color(0xFFFFD84D), ts * 0.35);
+    if (a.primed) {
+      // Kamikaze prêt à exploser : halo rouge et « !! ».
+      canvas.drawCircle(dst.center, ts * 0.55, Paint()..color = const Color(0x66FF2020));
+      _text(canvas, '!!', dst.topCenter + Offset(0, -ts * 0.05), const Color(0xFFFF4040), ts * 0.3);
+    }
     if (a.enraged) {
       canvas.drawRect(dst, Paint()..color = const Color(0x22FF0000));
     }

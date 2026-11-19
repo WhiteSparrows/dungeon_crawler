@@ -208,6 +208,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
       c.descend();
     } else if (k == LogicalKeyboardKey.keyP) {
       c.quaff();
+    } else if (k == LogicalKeyboardKey.keyK) {
+      c.skill();
     } else if (k == LogicalKeyboardKey.keyI) {
       _openBag();
     } else if (k == LogicalKeyboardKey.keyB) {
@@ -799,7 +801,7 @@ class _ActionBar extends StatelessWidget {
     final g = c.game;
     return Container(
       color: Palette.panel,
-      padding: const EdgeInsets.fromLTRB(6, 8, 6, 10),
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
       child: Row(
         children: [
           _ActionButton(
@@ -818,6 +820,14 @@ class _ActionBar extends StatelessWidget {
             onTap: g.healPotions > 0 ? c.quaff : null,
           ),
           _ActionButton(
+            label: g.skillReady ? 'POUVOIR' : 'POUVOIR ${g.skillCooldown}',
+            icon: Icon(Icons.flash_on, color: g.skillReady ? const Color(0xFF5EC8FF) : Palette.muted, size: 28),
+            onTap: g.gameOver ? null : c.skill,
+            onLongPress: () => _showSkill(context, g.skill.name, g.skill.desc, g.skill.cooldown),
+            highlight: g.skillReady && !g.gameOver,
+            highlightColor: const Color(0xFF5EC8FF),
+          ),
+          _ActionButton(
             label: 'DESCENDRE',
             icon: SpriteIcon(atlas, Sprites.stairsDown, size: 30),
             onTap: g.onStairs ? c.descend : null,
@@ -829,13 +839,35 @@ class _ActionBar extends StatelessWidget {
   }
 }
 
+void _showSkill(BuildContext context, String name, String desc, int cooldown) {
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: Palette.panel,
+      shape: const RoundedRectangleBorder(side: BorderSide(color: Color(0xFF5EC8FF), width: 2)),
+      title: Text(name, style: const TextStyle(color: Color(0xFF5EC8FF))),
+      content: Text('$desc\n\nRecharge : $cooldown tours.', style: const TextStyle(color: Palette.text, height: 1.4)),
+      actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('OK', style: pixel(9)))],
+    ),
+  );
+}
+
 class _ActionButton extends StatelessWidget {
-  const _ActionButton({required this.label, required this.icon, required this.onTap, this.highlight = false});
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.highlight = false,
+    this.onLongPress,
+    this.highlightColor = Palette.gold,
+  });
 
   final String label;
   final Widget icon;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final bool highlight;
+  final Color highlightColor;
 
   @override
   Widget build(BuildContext context) {
@@ -844,10 +876,11 @@ class _ActionButton extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Material(
-          color: highlight ? const Color(0xFF4A3A10) : const Color(0xFF2E2540),
-          shape: Border.all(color: highlight ? Palette.gold : Palette.panelBorder, width: 2),
+          color: highlight ? highlightColor.withValues(alpha: 0.22) : const Color(0xFF2E2540),
+          shape: Border.all(color: highlight ? highlightColor : Palette.panelBorder, width: 2),
           child: InkWell(
             onTap: onTap,
+            onLongPress: onLongPress,
             child: Opacity(
               opacity: enabled ? 1 : 0.35,
               child: Padding(
@@ -857,7 +890,7 @@ class _ActionButton extends StatelessWidget {
                   children: [
                     SizedBox(height: 30, child: Center(child: icon)),
                     const SizedBox(height: 4),
-                    Text(label, style: pixel(7, color: highlight ? Palette.gold : Palette.text)),
+                    Text(label, style: pixel(6, color: highlight ? highlightColor : Palette.text)),
                   ],
                 ),
               ),

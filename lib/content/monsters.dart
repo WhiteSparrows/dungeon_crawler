@@ -11,6 +11,18 @@ enum Behavior {
 
   /// N'agit qu'un tour sur deux.
   slow,
+
+  /// Tire à distance (portée [MonsterDef.range]) et garde ses distances.
+  ranged,
+
+  /// Fuit quand il est blessé (sous 40 % de ses PV).
+  coward,
+
+  /// Au contact, se met à gonfler un tour… puis explose sur tout ce qui l'entoure.
+  kamikaze,
+
+  /// Soigne ses alliés blessés et reste en retrait.
+  healer,
 }
 
 class MonsterDef {
@@ -34,7 +46,11 @@ class MonsterDef {
     this.summon,
     this.summonEvery = 0,
     this.enrage = false,
+    this.range = 0,
   });
+
+  /// Portée de tir (comportement [Behavior.ranged]).
+  final int range;
 
   final String id;
   final String name;
@@ -171,6 +187,7 @@ const monsterDefs = <MonsterDef>[
       atk: 6,
       def: 1,
       xp: 9,
+      behavior: Behavior.coward,
       minFloor: 4,
       onHit: OnHit.steal,
       onHitChance: 0.4),
@@ -220,7 +237,7 @@ const monsterDefs = <MonsterDef>[
       atk: 9,
       def: 1,
       xp: 12,
-      behavior: Behavior.erratic,
+      behavior: Behavior.coward,
       minFloor: 7,
       onHit: OnHit.steal,
       onHitChance: 0.3),
@@ -339,6 +356,130 @@ const monsterDefs = <MonsterDef>[
       minFloor: 14,
       onHit: OnHit.steal,
       onHitChance: 0.4),
+
+  // ---------------------------------------------------------------- Monstres tactiques
+  MonsterDef(
+      id: 'spitter',
+      name: 'Crapaud cracheur',
+      sprite: Sprites.slime,
+      tint: 0xFFE0FF70,
+      hp: 8,
+      atk: 2,
+      xp: 5,
+      behavior: Behavior.ranged,
+      range: 3,
+      minFloor: 2,
+      onHit: OnHit.poison,
+      onHitChance: 0.2),
+  MonsterDef(
+      id: 'gasbag',
+      name: 'Rat ballonné',
+      sprite: Sprites.rat,
+      tint: 0xFFC090FF,
+      hp: 6,
+      atk: 7,
+      xp: 4,
+      behavior: Behavior.kamikaze,
+      minFloor: 2,
+      weight: 6),
+  MonsterDef(
+      id: 'juggler',
+      name: 'Jongleur de couteaux',
+      sprite: 88,
+      tint: 0xFF90C0FF,
+      hp: 15,
+      atk: 6,
+      xp: 10,
+      behavior: Behavior.ranged,
+      range: 4,
+      minFloor: 4),
+  MonsterDef(
+      id: 'medic',
+      name: 'Secouriste du parc',
+      sprite: 98,
+      tint: 0xFFFF9090,
+      hp: 18,
+      atk: 4,
+      def: 1,
+      xp: 10,
+      behavior: Behavior.healer,
+      minFloor: 5,
+      weight: 6),
+  MonsterDef(
+      id: 'promoter',
+      name: 'Lanceur de promotions',
+      sprite: 98,
+      tint: 0xFFFFE080,
+      hp: 24,
+      atk: 9,
+      def: 1,
+      xp: 14,
+      behavior: Behavior.ranged,
+      range: 4,
+      minFloor: 7),
+  MonsterDef(
+      id: 'drone',
+      name: 'Drone de surveillance',
+      sprite: Sprites.bat,
+      tint: 0xFFC0C0C0,
+      hp: 14,
+      atk: 14,
+      xp: 12,
+      behavior: Behavior.kamikaze,
+      minFloor: 7,
+      weight: 6),
+  MonsterDef(
+      id: 'paparazzi',
+      name: 'Paparazzi',
+      sprite: Sprites.bandit,
+      tint: 0xFF80E0FF,
+      hp: 30,
+      atk: 12,
+      def: 2,
+      xp: 18,
+      behavior: Behavior.ranged,
+      range: 4,
+      minFloor: 10,
+      onHit: OnHit.embarrass,
+      onHitChance: 0.3),
+  MonsterDef(
+      id: 'makeup',
+      name: 'Maquilleuse de plateau',
+      sprite: 99,
+      tint: 0xFFFFD0A0,
+      hp: 34,
+      atk: 8,
+      def: 2,
+      xp: 18,
+      behavior: Behavior.healer,
+      minFloor: 10,
+      feminine: true,
+      weight: 6),
+  MonsterDef(
+      id: 'archivist',
+      name: 'Archiviste lanceur de dossiers',
+      sprite: 100,
+      tint: 0xFFD0D0FF,
+      hp: 44,
+      atk: 15,
+      def: 3,
+      xp: 24,
+      behavior: Behavior.ranged,
+      range: 4,
+      minFloor: 13,
+      onHit: OnHit.stun,
+      onHitChance: 0.15),
+  MonsterDef(
+      id: 'intern',
+      name: 'Stagiaire en burn-out',
+      sprite: 98,
+      tint: 0xFFFF8060,
+      hp: 30,
+      atk: 24,
+      xp: 20,
+      behavior: Behavior.kamikaze,
+      minFloor: 13,
+      weight: 6),
 
   // ---------------------------------------------------------------- Boss (un par zone)
   MonsterDef(

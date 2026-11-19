@@ -31,7 +31,7 @@ const themeDefs = <ThemeDef>[
     floorSet: _dirt,
     floorTint: 0xFFB8D0A8,
     wallTint: 0xFFB0C8B0,
-    monsters: ['rat', 'bat', 'slime', 'spider', 'croc', 'bandit', 'mimic'],
+    monsters: ['rat', 'bat', 'slime', 'spider', 'croc', 'bandit', 'spitter', 'gasbag', 'mimic'],
     boss: 'boss_ratking',
   ),
   ThemeDef(
@@ -40,7 +40,7 @@ const themeDefs = <ThemeDef>[
     floorSet: _sand,
     floorTint: 0xFFFFD0E0,
     wallTint: 0xFFE0C8FF,
-    monsters: ['clown', 'mascot', 'carny', 'firebat', 'ghost', 'mimic'],
+    monsters: ['clown', 'mascot', 'carny', 'firebat', 'ghost', 'juggler', 'medic', 'mimic'],
     boss: 'boss_clown',
   ),
   ThemeDef(
@@ -49,7 +49,7 @@ const themeDefs = <ThemeDef>[
     floorSet: _sand,
     floorTint: 0xFFE8EEFF,
     wallTint: 0xFFFFFFFF,
-    monsters: ['guard', 'crab', 'shopper', 'mannequin', 'cyclops', 'mimic'],
+    monsters: ['guard', 'crab', 'shopper', 'mannequin', 'cyclops', 'promoter', 'drone', 'mimic'],
     boss: 'boss_guard',
   ),
   ThemeDef(
@@ -58,7 +58,7 @@ const themeDefs = <ThemeDef>[
     floorSet: _dirt,
     floorTint: 0xFFA898D8,
     wallTint: 0xFF9888C0,
-    monsters: ['cameraman', 'fan', 'stuntdouble', 'lightghost', 'mimic'],
+    monsters: ['cameraman', 'fan', 'stuntdouble', 'lightghost', 'paparazzi', 'makeup', 'mimic'],
     boss: 'boss_host',
   ),
   ThemeDef(
@@ -67,7 +67,7 @@ const themeDefs = <ThemeDef>[
     floorSet: _dirt,
     floorTint: 0xFFD89080,
     wallTint: 0xFFD0A0A0,
-    monsters: ['clerk', 'stamp', 'printer', 'auditor', 'mimic'],
+    monsters: ['clerk', 'stamp', 'printer', 'auditor', 'archivist', 'intern', 'mimic'],
     boss: 'boss_director',
   ),
 ];

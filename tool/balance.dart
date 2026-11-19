@@ -69,6 +69,15 @@ Result playOne(int seed, RunSetup setup) {
       }
     }
     final adj = g.monsters.where((m) => m.pos.isAdjacent4(g.player.pos) && !m.disguised).toList();
+    final wantsSkill = switch (g.skill.id) {
+      'roll' || 'bribe' => g.player.hpRatio < 0.4 && adj.isNotEmpty,
+      _ => adj.isNotEmpty || g.player.hpRatio < 0.5,
+    };
+    if (g.skillReady && wantsSkill) {
+      final t = g.turn;
+      g.act(const SkillAction());
+      if (g.turn != t) continue;
+    }
     if (adj.isNotEmpty) {
       g.act(MoveAction(Dir.fromDelta(adj.first.pos - g.player.pos)!));
       continue;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../content/roles.dart';
+import '../../content/skills.dart';
 import '../../content/sprites.dart';
 import '../../content/upgrades.dart';
 import '../../core/show.dart';
@@ -124,6 +125,9 @@ class HubScreen extends StatelessWidget {
                 Text(r.name, style: TextStyle(color: owned ? Palette.text : Palette.muted, fontSize: 15)),
                 const SizedBox(height: 3),
                 Text(r.perks, style: const TextStyle(color: Palette.xp, fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text('Pouvoir : ${skillById(r.skill).name} — ${skillById(r.skill).desc}',
+                    style: const TextStyle(color: Color(0xFF5EC8FF), fontSize: 12)),
                 const SizedBox(height: 4),
                 Text('« ${r.pitch} »',
                     style: const TextStyle(color: Palette.muted, fontSize: 12, height: 1.3, fontStyle: FontStyle.italic)),

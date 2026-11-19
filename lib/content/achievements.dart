@@ -94,6 +94,18 @@ const achievementDefs = <AchievementDef>[
       "Vous avez vaincu le Directeur. Félicitations : vous êtes renouvelé pour une saison 2. Ce n'était pas "
           "une récompense. C'était une menace. On se revoit à la rentrée.",
       secret: true),
+  AchievementDef('showstopper', "Numéro d'acteur", 'Utiliser 10 fois votre compétence dans une run.',
+      BoxTier.argent,
+      "Dix fois le même numéro, et le public en redemande. Vous êtes officiellement un personnage récurrent. "
+          "Les scénaristes vous détestent, ils vont devoir vous écrire des répliques."),
+  AchievementDef('defused', 'Démineur amateur', "Échapper à l'explosion d'un kamikaze.", BoxTier.bronze,
+      "Il a gonflé, il a explosé, et vous étiez déjà ailleurs. Le kamikaze est mort pour rien. "
+          "Comme tous les kamikazes, me direz-vous. Mais lui, en plus, c'était un rat.",
+      secret: true),
+  AchievementDef('corruption', 'Corruption passive', 'Soudoyer un monstre.', BoxTier.bronze,
+      "Vous avez payé un monstre pour qu'il s'en aille. Il a accepté. Le donjon est donc un lieu de travail "
+          "comme un autre. Les syndicats de monstres saluent une « négociation constructive ».",
+      secret: true),
 ];
 
 AchievementDef achievementById(String id) => achievementDefs.firstWhere((a) => a.id == id);

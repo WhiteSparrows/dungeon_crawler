@@ -40,10 +40,10 @@ void _goTo(Game g, int floor) {
 
 void main() {
   group('Contenu', () {
-    test('25 monstres réguliers et 5 boss, tous utilisés par une zone', () {
+    test('35 monstres réguliers et 5 boss, tous utilisés par une zone', () {
       final regular = monsterDefs.where((m) => !m.boss).toList();
       final bosses = monsterDefs.where((m) => m.boss).toList();
-      expect(regular.length, 25);
+      expect(regular.length, 35);
       expect(bosses.length, 5);
       final used = {for (final t in themeDefs) ...t.monsters, for (final t in themeDefs) t.boss};
       for (final m in monsterDefs) {

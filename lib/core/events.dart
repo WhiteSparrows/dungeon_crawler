@@ -22,6 +22,7 @@ class AttackEvent extends GameEvent {
     required this.damage,
     this.crit = false,
     this.miss = false,
+    this.ranged = false,
   });
   final int attackerId;
   final int targetId;
@@ -30,6 +31,9 @@ class AttackEvent extends GameEvent {
   final int damage;
   final bool crit;
   final bool miss;
+
+  /// Tir à distance (projectile au lieu d'un coup au contact).
+  final bool ranged;
 }
 
 class DeathEvent extends GameEvent {
@@ -164,6 +168,20 @@ class TrapEvent extends GameEvent {
 class FloorModEvent extends GameEvent {
   const FloorModEvent(this.modIndex);
   final int modIndex;
+}
+
+/// Un kamikaze se met à gonfler ([exploded] faux) ou explose.
+class KamikazeEvent extends GameEvent {
+  const KamikazeEvent(this.actorId, this.pos, {this.exploded = false});
+  final int actorId;
+  final Pos pos;
+  final bool exploded;
+}
+
+/// Le joueur utilise sa compétence.
+class SkillEvent extends GameEvent {
+  const SkillEvent(this.skillId);
+  final String skillId;
 }
 
 enum MessageKind { info, good, danger, maestro }

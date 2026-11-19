@@ -15,7 +15,11 @@ class RoleDef {
     this.potions = 0,
     this.talents = const [],
     this.mysteryPotions = 0,
+    required this.skill,
   });
+
+  /// Compétence active (voir skills.dart).
+  final String skill;
 
   final String id;
   final String name;
@@ -48,6 +52,7 @@ class RoleDef {
 const roleDefs = <RoleDef>[
   RoleDef(
     id: 'lambda',
+    skill: 'haymaker',
     name: 'Candidat lambda',
     pitch: "Aucun talent, aucune expérience, aucune chance. Le public adore les outsiders. Brièvement.",
     perks: 'Équilibré. Rien de spécial.',
@@ -56,6 +61,7 @@ const roleDefs = <RoleDef>[
   ),
   RoleDef(
     id: 'concierge',
+    skill: 'night_round',
     name: 'Concierge',
     pitch: "Trente ans à surveiller les boîtes aux lettres. Aucun coffre ne lui ment.",
     perks: 'DEF +1 · Flair à mimiques · +1 potion de soin',
@@ -67,6 +73,7 @@ const roleDefs = <RoleDef>[
   ),
   RoleDef(
     id: 'influencer',
+    skill: 'live',
     name: 'Influenceuse',
     pitch: "Elle a 4 millions d'abonnés et zéro instinct de survie. Les sponsors se l'arrachent.",
     perks: 'Hype de départ +30 · Ami des sponsors · PV max -5',
@@ -78,6 +85,7 @@ const roleDefs = <RoleDef>[
   ),
   RoleDef(
     id: 'gym',
+    skill: 'warmup',
     name: 'Prof de gym',
     pitch: "Siffle, crie, fait des pompes entre deux meurtres. Allergique aux potions.",
     perks: 'PV max +12 · ATQ +1 · aucune potion de départ',
@@ -89,17 +97,18 @@ const roleDefs = <RoleDef>[
   ),
   RoleDef(
     id: 'accountant',
+    skill: 'bribe',
     name: 'Comptable',
     pitch: "Il a négocié son contrat de candidat. Il a perdu, mais il a négocié.",
-    perks: '+80 or · Négociateur · Pickpocket · ATQ -1',
+    perks: '+80 or · Négociateur · Pickpocket',
     sprite: 98,
     cost: 120,
-    atk: -1,
     gold: 80,
     talents: ['haggler', 'pickpocket'],
   ),
   RoleDef(
     id: 'chef',
+    skill: 'daily_special',
     name: 'Chef de cantine',
     pitch: "Il reconnaît une fiole à l'odeur. Ses gelées l'ont reconnu aussi : elles veulent se venger.",
     perks: 'Nez fin · 2 fioles mystère au départ',
@@ -110,6 +119,7 @@ const roleDefs = <RoleDef>[
   ),
   RoleDef(
     id: 'stuntman',
+    skill: 'roll',
     name: 'Cascadeur',
     pitch: "Il est déjà mort onze fois. Il trouve ça surfait.",
     perks: 'Second souffle · Œil de lynx · PV max -5',

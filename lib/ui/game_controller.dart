@@ -153,6 +153,12 @@ class GameController extends ChangeNotifier {
     _perform(const QuaffAction());
   }
 
+  /// Compétence active du rôle.
+  void skill() {
+    _autoPath = [];
+    _perform(const SkillAction());
+  }
+
   /// Action d'inventaire (utiliser, équiper, retirer, jeter) : consomme un tour.
   void inventoryAction(PlayerAction action) {
     _autoPath = [];
@@ -417,6 +423,17 @@ class GameController extends ChangeNotifier {
             _shakeStartMs = nowMs;
             _buzz(HapticFeedback.mediumImpact);
           }
+        case KamikazeEvent(:final exploded):
+          floaters.add(Floater(exploded ? 'BOUM !' : '!!', e.pos.x.toDouble(), e.pos.y.toDouble() - 0.4,
+              const Color(0xFFFF5030), nowMs, big: true));
+          if (exploded) {
+            _shakeStartMs = nowMs;
+            _buzz(HapticFeedback.heavyImpact);
+          }
+        case SkillEvent():
+          final p = game.player.pos;
+          floaters.add(Floater(game.skill.name.toUpperCase(), p.x.toDouble(), p.y.toDouble() - 0.7,
+              const Color(0xFF5EC8FF), nowMs, big: true));
         case RevealEvent():
           floaters.add(Floater('!!!', e.pos.x.toDouble(), e.pos.y.toDouble() - 0.4, const Color(0xFFFF5050), nowMs,
               big: true));
@@ -470,6 +487,10 @@ class GameController extends ChangeNotifier {
           p(Sfx.hurt);
         case TwistEvent():
           p(Sfx.boss);
+        case KamikazeEvent(:final exploded):
+          p(exploded ? Sfx.trap : Sfx.door);
+        case SkillEvent():
+          p(Sfx.crit);
         default:
           break;
       }

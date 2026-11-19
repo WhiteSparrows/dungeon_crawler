@@ -51,6 +51,12 @@ class Actor {
   /// Monstre vedette (modificateur d'étage) : doré, plus fort, mieux payé.
   bool elite = false;
 
+  /// Kamikaze sur le point d'exploser.
+  bool primed = false;
+
+  /// Compteur de soins (soigneurs).
+  int healTimer = 0;
+
   bool hasStatus(Status s) => statuses.containsKey(s);
   bool get isBoss => monster?.boss ?? false;
 

@@ -5,6 +5,7 @@ import '../content/items.dart';
 import '../content/lines_fr.dart';
 import '../content/monsters.dart';
 import '../content/roles.dart';
+import '../content/skills.dart';
 import '../content/sponsors.dart';
 import '../content/status.dart';
 import '../content/talents.dart';
@@ -56,6 +57,11 @@ class EquipAction extends PlayerAction {
 class UnequipAction extends PlayerAction {
   const UnequipAction(this.slot);
   final ItemKind slot;
+}
+
+/// Compétence active du rôle.
+class SkillAction extends PlayerAction {
+  const SkillAction();
 }
 
 class DropAction extends PlayerAction {
@@ -192,6 +198,12 @@ class Game {
   /// Boss de l'étage (étages 3, 6, 9, 12, 15).
   Actor? boss;
   bool _bossAnnounced = false;
+
+  // Compétence active
+  int skillCooldown = 0;
+  int skillUses = 0;
+  SkillDef get skill => skillById(setup.role.skill);
+  bool get skillReady => skillCooldown == 0;
 
   // Variété : lieux, pièges, modificateurs
   final features = <Feature>[];
@@ -404,6 +416,15 @@ class Game {
         _addToBag(current);
         _recalcStats();
         events.add(MessageEvent('Vous retirez ${current.name}.'));
+      case SkillAction():
+        if (!skillReady) return [MessageEvent('${skill.name} : encore $skillCooldown tour(s) de recharge.')];
+        final why = _useSkill(events);
+        if (why != null) return [MessageEvent(why)];
+        skillCooldown = skill.cooldown;
+        skillUses++;
+        events.add(SkillEvent(skill.id));
+        if (skillUses >= 10) _unlock('showstopper', events);
+        if (rng.chance(0.3)) _say(MaestroLines.skillUsed, events);
       case DropAction(:final itemId):
         final inv = _inv(itemId);
         if (inv == null) return const [];
@@ -421,6 +442,7 @@ class Game {
       return events;
     }
     _spotTraps(events);
+    if (skillCooldown > 0) skillCooldown--;
     if (rageTurns > 0) {
       rageTurns--;
       if (rageTurns == 0) events.add(const MessageEvent('Votre rage retombe.'));
@@ -1316,7 +1338,7 @@ class Game {
     events.add(const MessageEvent('Le coffre ouvre un œil. Puis une bouche. C\'est une MIMIQUE !', MessageKind.danger));
   }
 
-  void _attack(Actor attacker, Actor target, List<GameEvent> events) {
+  void _attack(Actor attacker, Actor target, List<GameEvent> events, {double power = 1, bool ranged = false}) {
     final byPlayer = attacker.isPlayer;
     final r = resolveAttack(
       attacker,
@@ -1326,7 +1348,7 @@ class Game {
       multiplier: byPlayer && rageTurns > 0 ? 2 : 1,
     );
     // Gêné : les coups font moitié moins mal.
-    var damage = r.damage;
+    var damage = (r.damage * power).round();
     if (!r.miss && attacker.hasStatus(Status.embarrassed)) damage = (damage / 2).ceil();
     events.add(AttackEvent(
       attackerId: attacker.id,
@@ -1336,6 +1358,7 @@ class Game {
       damage: damage,
       crit: r.crit,
       miss: r.miss,
+      ranged: ranged,
     ));
     if (r.miss) {
       events.add(MessageEvent(byPlayer ? 'Vous ratez ${_the(target)}.' : '${_cap(_the(attacker))} vous rate.'));
@@ -1582,6 +1605,7 @@ class Game {
         _randomStep(m, events);
         continue;
       }
+      if (_tacticalTurn(m, behavior, sees, events)) continue;
 
       if (m.pos.isAdjacent4(player.pos)) {
         _attack(m, player, events);
@@ -1605,6 +1629,198 @@ class Game {
       }
       if (m.pos == goal && !sees) m.lastSeenTarget = null;
     }
+  }
+
+  /// Comportements spéciaux. Vrai si le monstre a agi (sinon : comportement normal).
+  bool _tacticalTurn(Actor m, Behavior behavior, bool sees, List<GameEvent> events) {
+    final dist = m.pos.chebyshev(player.pos);
+    switch (behavior) {
+      case Behavior.kamikaze:
+        if (m.primed) {
+          _explode(m, events);
+          return true;
+        }
+        if (dist <= 1) {
+          m.primed = true;
+          events.add(KamikazeEvent(m.id, m.pos));
+          events.add(MessageEvent('${_cap(_the(m))} gonfle dangereusement !', MessageKind.danger));
+          if (rng.chance(0.5)) _say(MaestroLines.kamikaze, events, monster: _the(m));
+          return true;
+        }
+        return false;
+      case Behavior.coward:
+        return m.hpRatio < 0.4 && _stepAway(m, events);
+      case Behavior.ranged:
+        if (dist <= 1) return _stepAway(m, events);
+        if (sees && dist <= m.monster!.range) {
+          // Un tir fait un peu moins mal qu'un coup au contact.
+          _attack(m, player, events, ranged: true, power: 0.75);
+          return true;
+        }
+        return false;
+      case Behavior.healer:
+        if (_tryHeal(m, events)) return true;
+        if (dist <= 1) return _stepAway(m, events);
+        // Reste en retrait derrière ses alliés.
+        return sees && dist <= 3;
+      default:
+        return false;
+    }
+  }
+
+  /// S'éloigne d'une case du joueur si possible.
+  bool _stepAway(Actor m, List<GameEvent> events) {
+    final now = m.pos.manhattan(player.pos);
+    Pos? best;
+    var bestD = now;
+    for (final p in m.pos.neighbors4) {
+      if (!isFree(p)) continue;
+      final d = p.manhattan(player.pos);
+      if (d > bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+    if (best == null) return false;
+    events.add(MoveEvent(m.id, m.pos, best));
+    m.pos = best;
+    return true;
+  }
+
+  /// Un soigneur soigne l'allié le plus abîmé à portée, tous les 3 tours.
+  bool _tryHeal(Actor healer, List<GameEvent> events) {
+    healer.healTimer++;
+    if (healer.healTimer % 3 != 0) return false;
+    Actor? target;
+    for (final a in monsters) {
+      if (!a.alive || a.disguised || a.hp >= a.maxHp || a.pos.chebyshev(healer.pos) > 4) continue;
+      if (target == null || a.hpRatio < target.hpRatio) target = a;
+    }
+    if (target == null) return false;
+    final amount = (target.maxHp * 0.3).round().clamp(1, target.maxHp - target.hp);
+    target.hp += amount;
+    events.add(HealEvent(target.pos, amount));
+    events.add(MessageEvent('${_cap(_the(healer))} soigne ${_the(target)} (+$amount).'));
+    return true;
+  }
+
+  /// Explosion d'un kamikaze : blesse tout ce qui est autour, lui compris.
+  void _explode(Actor k, List<GameEvent> events) {
+    final dmg = k.atk + floor ~/ 2;
+    events.add(KamikazeEvent(k.id, k.pos, exploded: true));
+    events.add(MessageEvent('BOUM ! ${_cap(_the(k))} explose !', MessageKind.danger));
+    final victims = [player, ...monsters].where((a) => a != k && a.alive && a.pos.chebyshev(k.pos) <= 1).toList();
+    if (!victims.contains(player)) _unlock('defused', events);
+    for (final v in victims) {
+      v.hp -= dmg;
+      events.add(StatusDamageEvent(v.id, v.pos, dmg, Status.burn.index));
+      if (v.alive) continue;
+      if (v.isPlayer) {
+        _playerDown(_the(k), events, killerName: k.name);
+      } else {
+        _kill(v, player, events);
+      }
+    }
+    if (k.alive && monsters.contains(k)) {
+      k.hp = 0;
+      _kill(k, player, events);
+    }
+  }
+
+  // ================================================================ compétences
+
+  /// Applique la compétence. Renvoie un message d'échec (rien ne se passe) ou null.
+  String? _useSkill(List<GameEvent> events) {
+    final adjacent = monsters.where((m) => m.pos.isAdjacent4(player.pos) && !m.disguised && m.alive).toList();
+    switch (skill.id) {
+      case 'haymaker':
+        if (adjacent.isEmpty) return 'Personne au contact à frapper. Vous moulinez dans le vide.';
+        events.add(const MessageEvent('COUP DE POING DÉSESPÉRÉ !', MessageKind.good));
+        for (final m in adjacent) {
+          if (m.alive) _attack(player, m, events, power: 1.5);
+        }
+      case 'night_round':
+        for (var y = 0; y < level.height; y++) {
+          for (var x = 0; x < level.width; x++) {
+            explored.add(Pos(x, y));
+          }
+        }
+        for (final t in traps) {
+          t.revealed = true;
+        }
+        var mimics = 0;
+        for (final m in monsters) {
+          if (m.disguised) {
+            m.disguised = false;
+            mimics++;
+          }
+        }
+        events.add(MessageEvent(
+            'Ronde de nuit : plan, pièges${mimics > 0 ? ' et $mimics mimique(s)' : ''} repérés.', MessageKind.good));
+      case 'live':
+        var n = 0;
+        for (final m in monsters) {
+          if (visible.contains(m.pos) && !m.disguised) {
+            _applyStatus(m, Status.embarrassed, events);
+            n++;
+          }
+        }
+        show.addHype(15);
+        events.add(MessageEvent('LIVE ! $n monstre(s) découvrent qu\'ils sont filmés. Malaise général.',
+            MessageKind.good));
+      case 'warmup':
+        final before = player.hp;
+        player.hp = (player.hp + (player.maxHp * 0.25).round()).clamp(0, player.maxHp);
+        if (player.hp > before) events.add(HealEvent(player.pos, player.hp - before));
+        rageTurns = rageTurns < 5 ? 5 : rageTurns;
+        events.add(const MessageEvent('Dix pompes, trois jumping jacks : dégâts doublés 5 tours !', MessageKind.good));
+      case 'bribe':
+        final cost = 15 + 3 * floor;
+        Actor? target;
+        for (final m in monsters) {
+          if (!visible.contains(m.pos) || m.disguised || m.isBoss) continue;
+          if (target == null || m.pos.manhattan(player.pos) < target.pos.manhattan(player.pos)) target = m;
+        }
+        if (target == null) return 'Aucun monstre en vue à soudoyer.';
+        if (gold < cost) return 'Il faut $cost pièces pour soudoyer quelqu\'un. Vous êtes trop pauvre pour être corrompu.';
+        gold -= cost;
+        monsters.remove(target);
+        events.add(PickupEvent(target.pos, '-$cost or'));
+        events.add(MessageEvent('${_cap(_the(target))} empoche $cost pièces et quitte le plateau en sifflotant.',
+            MessageKind.good));
+        _unlock('corruption', events);
+      case 'daily_special':
+        for (final m in adjacent) {
+          _applyStatus(m, Status.poison, events);
+        }
+        final before = player.hp;
+        player.hp = (player.hp + 10).clamp(0, player.maxHp);
+        if (player.hp > before) events.add(HealEvent(player.pos, player.hp - before));
+        events.add(MessageEvent('Plat du jour servi à ${adjacent.length} convive(s). Personne ne finit son assiette.',
+            MessageKind.good));
+      case 'roll':
+        // Cases accessibles en 3 pas au plus, la plus éloignée des monstres.
+        final dist = distanceMap(level.tiles, player.pos, isFree);
+        final threats = monsters.where((m) => !m.disguised && m.pos.chebyshev(player.pos) <= 6).toList();
+        Pos? best;
+        var bestScore = -1;
+        for (final e in dist.entries) {
+          if (e.value == 0 || e.value > 3) continue;
+          final score = threats.isEmpty ? e.value : threats.map((m) => m.pos.manhattan(e.key)).reduce((a, b) => a < b ? a : b);
+          if (score > bestScore) {
+            bestScore = score;
+            best = e.key;
+          }
+        }
+        if (best == null) return 'Pas la place de faire une roulade. Vous faites une petite flexion à la place.';
+        events.add(MoveEvent(player.id, player.pos, best));
+        player.pos = best;
+        _collect(events);
+        _checkTrap(events);
+        events.add(const MessageEvent('ROULADE ! Le public applaudit la réception. Les monstres, moins.',
+            MessageKind.good));
+    }
+    return null;
   }
 
   /// Les boss appellent régulièrement des renforts.
@@ -1670,7 +1886,7 @@ class Game {
 
   /// Version du format de sauvegarde. À incrémenter dès que le moteur change de façon
   /// à rendre un ancien journal impossible à rejouer à l'identique.
-  static const saveVersion = 2;
+  static const saveVersion = 3;
 
   static String _encode(PlayerAction a) => switch (a) {
         MoveAction(:final dir) => 'm${dir.index}',
@@ -1681,6 +1897,7 @@ class Game {
         EquipAction(:final itemId) => 'e:$itemId',
         UnequipAction(:final slot) => 'x:${slot.index}',
         DropAction(:final itemId) => 'r:$itemId',
+        SkillAction() => 'k',
       };
 
   Map<String, Object?> toSave() => {
@@ -1749,6 +1966,8 @@ class Game {
         openBox();
       case 'f':
         chooseFeature(int.parse(arg));
+      case 'k':
+        act(const SkillAction());
       case 'X':
         abandon();
       case 'G':

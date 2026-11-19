@@ -12,7 +12,7 @@ un animateur cabotin. Objectif : descendre le plus bas possible.
 - **SAC** : équiper une arme / un accessoire, boire, jeter (chaque action prend un tour).
 - **Coffre clignotant** (en bas à droite) : ouvrir ses loot boxes (gratuit, hors tour).
 - Clavier (PC) : flèches / ZQSD / WASD, `Espace` attendre, `Entrée` descendre, `P` potion de soin,
-  `I` sac, `B` loot box, `R` rejouer.
+  `I` sac, `B` loot box, `K` pouvoir, `R` rejouer.
 - **Trophée** (en haut) : tableau d'honneur des succès, commentés par MAESTRO.
 - **Barre du show** (sous les PV) : audience, hype, tours avant démolition, jauges des sponsors.
   La toucher ouvre la régie (sponsors, talents).
@@ -47,6 +47,16 @@ un animateur cabotin. Objectif : descendre le plus bas possible.
 - **Altérations** : poison, feu (dégâts par tour), étourdi (tour perdu), gêné (coups à moitié).
   Certaines armes les infligent, des bagues en immunisent, la potion de soin retire poison et feu,
   le pansement sponsorisé retire tout.
+
+## Compétences et monstres tactiques
+
+- **Bouton POUVOIR** : chaque rôle a une compétence avec temps de recharge (appui long = description).
+  Coup de poing désespéré (lambda), Ronde de nuit (concierge), Live sauvage (influenceuse),
+  Échauffement (prof de gym), Pot-de-vin (comptable), Plat du jour (chef), Roulade (cascadeur).
+- **35 monstres** avec des comportements distincts : **tireurs** à distance qui gardent leurs
+  distances, **fuyards** (forain, acheteur compulsif) qui détalent blessés, **kamikazes** qui
+  gonflent un tour (« !! ») avant d'exploser sur tout ce qui les entoure, **soigneurs** qui
+  remettent leurs alliés sur pied depuis l'arrière.
 
 ## Variété
 
