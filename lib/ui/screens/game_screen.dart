@@ -19,6 +19,7 @@ import '../render/sprite_atlas.dart';
 import '../audio.dart';
 import '../theme.dart';
 import 'achievements_screen.dart';
+import '../tutorial.dart';
 import 'backstage_screen.dart';
 import 'feature_dialog.dart';
 import 'inventory_sheet.dart';
@@ -59,6 +60,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _watchBackstage();
       _watchFeature();
+      _watchTips();
     });
   }
 
@@ -80,6 +82,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     c.vibrations = widget.store.profile.vibrations;
     c.addListener(_watchBackstage);
     c.addListener(_watchFeature);
+    c.addListener(_watchTips);
     c.addListener(_watchGameOver);
     painter = DungeonPainter(c, widget.atlas);
     _summary = null;
@@ -135,6 +138,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   }
 
   bool _featureOpen = false;
+  bool _tipOpen = false;
+
+  /// Conseils de MAESTRO : un à la fois, quand rien d'autre n'est ouvert.
+  void _watchTips() {
+    final p = widget.store.profile;
+    if (!p.tipsOn || _tipOpen || _backstageOpen || _featureOpen || c.animating) return;
+    final id = nextInGameTip(c.game, p.seenTips);
+    if (id == null) return;
+    _tipOpen = true;
+    widget.store.markTip(id);
+    c.stopAutoWalk();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      // Laisse l'écran de fin s'afficher avant le conseil de fin de partie.
+      if (id == 'gameover') await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return;
+      final off = await showTip(context, widget.atlas, id);
+      if (off) widget.store.setTips(false);
+      _tipOpen = false;
+      _focus.requestFocus();
+      if (mounted) _watchTips();
+    });
+  }
 
   /// Le joueur s'approche d'un lieu interactif : dialogue de choix.
   void _watchFeature() {
@@ -160,7 +186,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         ..music(Music.show);
       await Navigator.of(context).push(
         PageRouteBuilder<void>(
-          pageBuilder: (_, _, _) => BackstageScreen(c: c, atlas: widget.atlas),
+          pageBuilder: (_, _, _) => BackstageScreen(c: c, atlas: widget.atlas, store: widget.store),
           transitionsBuilder: (_, anim, _, child) => FadeTransition(opacity: anim, child: child),
           transitionDuration: const Duration(milliseconds: 500),
         ),

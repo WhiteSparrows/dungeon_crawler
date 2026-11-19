@@ -153,6 +153,9 @@ class GameController extends ChangeNotifier {
     _perform(const QuaffAction());
   }
 
+  /// Interrompt le déplacement automatique (ex. : un conseil s'affiche).
+  void stopAutoWalk() => _autoPath = [];
+
   /// Compétence active du rôle.
   void skill() {
     _autoPath = [];

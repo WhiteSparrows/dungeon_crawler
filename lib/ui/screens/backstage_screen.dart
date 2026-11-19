@@ -5,16 +5,21 @@ import '../../content/sprites.dart';
 import '../../core/backstage.dart';
 import '../../core/game.dart';
 import '../../core/show.dart';
+import '../../meta/profile_store.dart';
 import '../game_controller.dart';
+import '../tutorial.dart';
 import '../render/sprite_atlas.dart';
 import '../theme.dart';
 
 /// Entre deux étages : le plateau d'interview de MAESTRO, puis les coulisses.
 class BackstageScreen extends StatefulWidget {
-  const BackstageScreen({super.key, required this.c, required this.atlas});
+  const BackstageScreen({super.key, required this.c, required this.atlas, this.store});
 
   final GameController c;
   final SpriteAtlas atlas;
+
+  /// Pour les conseils de MAESTRO (absent dans certains tests).
+  final ProfileStore? store;
 
   @override
   State<BackstageScreen> createState() => _BackstageScreenState();
@@ -25,6 +30,18 @@ class _BackstageScreenState extends State<BackstageScreen> {
   bool _coulisses = false;
 
   Game get g => widget.c.game;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tip('interview'));
+  }
+
+  Future<void> _tip(String id) async {
+    final store = widget.store;
+    if (store == null || !mounted || !store.takeTip(id)) return;
+    if (await showTip(context, widget.atlas, id)) store.setTips(false);
+  }
 
   @override
   void dispose() {
@@ -147,7 +164,10 @@ class _BackstageScreenState extends State<BackstageScreen> {
                       ),
                   ],
                 )
-              : _bigButton('PASSER EN COULISSES', () => setState(() => _coulisses = true)),
+              : _bigButton('PASSER EN COULISSES', () {
+                  setState(() => _coulisses = true);
+                  WidgetsBinding.instance.addPostFrameCallback((_) => _tip('backstage'));
+                }),
         ),
       ],
     );

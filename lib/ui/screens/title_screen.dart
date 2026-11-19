@@ -6,6 +6,7 @@ import '../../meta/profile_store.dart';
 import '../audio.dart';
 import '../render/sprite_atlas.dart';
 import '../theme.dart';
+import '../tutorial.dart';
 import 'achievements_screen.dart';
 import 'game_screen.dart';
 import 'hub_screen.dart';
@@ -79,6 +80,12 @@ class TitleScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     GameAudio.instance.music(Music.show);
+    // Après la première partie, MAESTRO présente la Loge et le défi du jour.
+    if (store.profile.runs >= 1 && store.takeTip('loge')) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (context.mounted && await showTip(context, atlas, 'loge')) store.setTips(false);
+      });
+    }
     return Scaffold(
       body: SafeArea(
         child: ListenableBuilder(

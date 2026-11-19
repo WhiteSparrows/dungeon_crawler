@@ -95,6 +95,10 @@ class Profile {
   bool soundFx = true;
   bool music = true;
 
+  // Tutoriel : conseils de MAESTRO déjà vus
+  bool tipsOn = true;
+  final seenTips = <String>{};
+
   // Défi du jour
   String dailyDate = '';
   int dailyBestFloor = 0;
@@ -230,6 +234,8 @@ class Profile {
         'dpad': dpad,
         'sfx': soundFx,
         'music': music,
+        'tipsOn': tipsOn,
+        'seenTips': seenTips.toList(),
       };
 
   factory Profile.fromJson(Map<String, Object?> j) {
@@ -247,7 +253,9 @@ class Profile {
       ..vibrations = j['vibrations'] as bool? ?? true
       ..dpad = j['dpad'] as bool? ?? false
       ..soundFx = j['sfx'] as bool? ?? true
-      ..music = j['music'] as bool? ?? true;
+      ..music = j['music'] as bool? ?? true
+      ..tipsOn = j['tipsOn'] as bool? ?? true;
+    p.seenTips.addAll((j['seenTips'] as List?)?.cast<String>() ?? const []);
     p.achievements.addAll((j['achievements'] as List?)?.cast<String>() ?? const []);
     p.roles.addAll((j['roles'] as List?)?.cast<String>() ?? const []);
     final ups = j['upgrades'] as Map?;

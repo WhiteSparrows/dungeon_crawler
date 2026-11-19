@@ -79,6 +79,30 @@ class SettingsScreen extends StatelessWidget {
                   },
                 ),
                 _toggle(
+                  'Conseils de MAESTRO',
+                  'Petites fiches qui expliquent chaque mécanique, la première fois.',
+                  p.tipsOn,
+                  store.setTips,
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 12, bottom: 10),
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      shape: const RoundedRectangleBorder(),
+                      side: const BorderSide(color: Palette.maestro),
+                      padding: const EdgeInsets.all(12),
+                    ),
+                    onPressed: () {
+                      store.resetTips();
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Les conseils de MAESTRO réapparaîtront au fil de la prochaine partie.'),
+                      ));
+                    },
+                    icon: const Icon(Icons.school, color: Palette.maestro),
+                    label: Text('REVOIR LES CONSEILS', style: pixel(8, color: Palette.maestro)),
+                  ),
+                ),
+                _toggle(
                   'Vibrations',
                   'Coups reçus, éliminations, boss, montées de niveau.',
                   p.vibrations,

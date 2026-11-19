@@ -48,6 +48,14 @@ un animateur cabotin. Objectif : descendre le plus bas possible.
   Certaines armes les infligent, des bagues en immunisent, la potion de soin retire poison et feu,
   le pansement sponsorisé retire tout.
 
+## Tutoriel
+
+22 conseils de MAESTRO (`lib/content/tips.dart`) s'affichent chacun une seule fois, au moment où la
+mécanique apparaît : déplacements, bandeau, premier monstre, pouvoir, potions, sac, loot box, coffres,
+lieux, pièges, escalier, compte à rebours, hype, sponsors, altérations, boss, interview, coulisses, fin
+de run, Loge. Le choix du conseil est fait par `nextInGameTip` (`lib/ui/tutorial.dart`). Réglages :
+couper les conseils ou les revoir depuis le début.
+
 ## Compétences et monstres tactiques
 
 - **Bouton POUVOIR** : chaque rôle a une compétence avec temps de recharge (appui long = description).

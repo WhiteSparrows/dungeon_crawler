@@ -109,6 +109,30 @@ class ProfileStore extends ChangeNotifier {
     _save();
   }
 
+  /// Conseil de MAESTRO vu : il ne réapparaîtra plus.
+  void markTip(String id) {
+    if (profile.seenTips.add(id)) _save();
+  }
+
+  void setTips(bool on) {
+    profile.tipsOn = on;
+    _save();
+  }
+
+  /// Revoir tous les conseils depuis le début.
+  void resetTips() {
+    profile.seenTips.clear();
+    profile.tipsOn = true;
+    _save();
+  }
+
+  /// Faut-il montrer ce conseil maintenant ? (le marque comme vu si oui)
+  bool takeTip(String id) {
+    if (!profile.tipsOn || profile.seenTips.contains(id)) return false;
+    markTip(id);
+    return true;
+  }
+
   void setDpad(bool on) {
     profile.dpad = on;
     _save();
@@ -121,7 +145,9 @@ class ProfileStore extends ChangeNotifier {
       ..vibrations = keep.vibrations
       ..dpad = keep.dpad
       ..soundFx = keep.soundFx
-      ..music = keep.music;
+      ..music = keep.music
+      ..tipsOn = keep.tipsOn;
+    profile.seenTips.addAll(keep.seenTips);
     _save();
   }
 
