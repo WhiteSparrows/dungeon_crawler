@@ -1,0 +1,4 @@
+﻿Tiny Dungeon (1.0) - Created/distributed by Kenney (www.kenney.nl)
+License: Creative Commons Zero, CC0 - http://creativecommons.org/publicdomain/zero/1.0/
+Free to use in personal, educational and commercial projects. Credit appreciated (Kenney / www.kenney.nl).
+Sheet: tiny_dungeon.png = Tilemap/tilemap_packed.png, 12 x 11 tiles of 16x16 px, no spacing.

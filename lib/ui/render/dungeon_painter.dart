@@ -1,0 +1,285 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
+import '../../content/sprites.dart';
+import '../../core/entities.dart';
+import '../../core/events.dart';
+import '../../core/grid.dart';
+import '../game_controller.dart';
+import 'sprite_atlas.dart';
+
+/// Nombre de tuiles visibles en largeur : règle le zoom.
+const tilesAcross = 11.0;
+
+/// Géométrie caméra partagée entre le dessin et la conversion tap → case.
+class Camera {
+  Camera(this.size, this.centerX, this.centerY) : tileSize = (size.width / tilesAcross).floorToDouble();
+
+  final Size size;
+  final double centerX;
+  final double centerY;
+  final double tileSize;
+
+  Offset toScreen(double x, double y) => Offset(
+        (x - centerX) * tileSize + size.width / 2 - tileSize / 2,
+        (y - centerY) * tileSize + size.height / 2 - tileSize / 2,
+      );
+
+  Pos toTile(Offset s) => Pos(
+        ((s.dx - size.width / 2 + tileSize / 2) / tileSize + centerX).floor(),
+        ((s.dy - size.height / 2 + tileSize / 2) / tileSize + centerY).floor(),
+      );
+}
+
+class DungeonPainter extends CustomPainter {
+  DungeonPainter(this.c, this.atlas) : super(repaint: c);
+
+  final GameController c;
+  final SpriteAtlas atlas;
+
+  /// Position interpolée d'un acteur pendant l'animation du tour.
+  Offset renderPos(Actor a) {
+    final prev = c.prevPos[a.id] ?? a.pos;
+    final t = easeMove(c.turnT);
+    return Offset(prev.x + (a.pos.x - prev.x) * t, prev.y + (a.pos.y - prev.y) * t);
+  }
+
+  Camera cameraFor(Size size) {
+    final p = renderPos(c.game.player);
+    return Camera(size, p.dx, p.dy);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final g = c.game;
+    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF0B0910));
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+
+    final shake = c.shake;
+    if (shake > 0) {
+      canvas.translate(math.sin(c.nowMs / 18) * shake, math.cos(c.nowMs / 23) * shake);
+    }
+
+    final cam = cameraFor(size);
+    final ts = cam.tileSize;
+    final halfW = (size.width / ts / 2).ceil() + 1;
+    final halfH = (size.height / ts / 2).ceil() + 1;
+    final cx = cam.centerX.round(), cy = cam.centerY.round();
+
+    final theme = g.theme;
+    final floorSet = theme.floorSet;
+    final floorTint = Color(theme.floorTint);
+    final wallTint = Color(theme.wallTint);
+    final dim = Paint()..color = const Color(0x99000000);
+
+    // --- Décor
+    for (var y = cy - halfH; y <= cy + halfH; y++) {
+      for (var x = cx - halfW; x <= cx + halfW; x++) {
+        final p = Pos(x, y);
+        if (!g.level.tiles.inBounds(p) || !g.explored.contains(p)) continue;
+        final dst = cam.toScreen(x.toDouble(), y.toDouble()) & Size(ts + 0.5, ts + 0.5);
+        final tile = g.level.tiles[p];
+        final h = _hash(x, y, g.floor);
+        if (tile == Tile.wall) {
+          if (!_touchesFloor(p)) continue;
+          atlas.draw(canvas, Sprites.wallVariants[h % Sprites.wallVariants.length], dst, tint: wallTint);
+        } else {
+          atlas.draw(canvas, floorSet[h % floorSet.length], dst, tint: floorTint);
+          if (tile == Tile.stairsDown) atlas.draw(canvas, Sprites.stairsDown, dst);
+        }
+        if (!g.visible.contains(p)) canvas.drawRect(dst, dim);
+      }
+    }
+
+    // --- Objets au sol
+    for (final it in g.floorItems) {
+      if (!g.explored.contains(it.pos)) continue;
+      final dst = cam.toScreen(it.pos.x.toDouble(), it.pos.y.toDouble()) & Size(ts, ts);
+      final sprite = it.item == null ? Sprites.coin : g.spriteOf(it.item!);
+      final seen = g.visible.contains(it.pos);
+      if (it.item != null && seen) {
+        // Halo de la couleur de rareté.
+        canvas.drawCircle(dst.center, ts * 0.32,
+            Paint()..color = Color(it.item!.rarity.color).withValues(alpha: 0.22));
+      }
+      atlas.draw(canvas, sprite, dst.deflate(ts * 0.12), opacity: seen ? 1 : 0.45);
+    }
+
+    // --- Coffres (et mimiques déguisées, indiscernables)
+    void drawChest(Pos p, int sprite) {
+      if (!g.explored.contains(p)) return;
+      final dst = cam.toScreen(p.x.toDouble(), p.y.toDouble()) & Size(ts, ts);
+      atlas.draw(canvas, sprite, dst, opacity: g.visible.contains(p) ? 1 : 0.45);
+    }
+
+    for (final ch in g.chests) {
+      drawChest(ch.pos, Sprites.chest);
+    }
+    for (final m in g.monsters) {
+      if (!m.disguised) continue;
+      drawChest(m.pos, m.displaySprite);
+      if (g.has('mimic_sense') && g.explored.contains(m.pos)) {
+        // Talent « Flair à mimiques » : un point d'exclamation rouge trahit le monstre.
+        final o = cam.toScreen(m.pos.x.toDouble(), m.pos.y.toDouble());
+        _text(canvas, '!', o + Offset(ts * 0.8, ts * 0.15), const Color(0xFFFF4040), ts * 0.3);
+      }
+    }
+
+    final t = c.turnT;
+
+    // --- Monstres qui meurent ce tour-ci : flash puis fondu
+    for (final e in c.turnEvents) {
+      if (e is DeathEvent && !e.isPlayer && t < 1) {
+        final dst = cam.toScreen(e.pos.x.toDouble(), e.pos.y.toDouble()) & Size(ts, ts);
+        atlas.draw(canvas, e.sprite, dst, opacity: 1 - t, flash: const Color(0xFFFF4040));
+      }
+    }
+
+    // --- Monstres puis joueur
+    for (final m in g.monsters) {
+      if (!g.visible.contains(m.pos) || m.disguised) continue;
+      _drawActor(canvas, cam, m, t);
+    }
+    if (g.gameOver) {
+      final dst = cam.toScreen(g.player.pos.x.toDouble(), g.player.pos.y.toDouble()) & Size(ts, ts);
+      atlas.draw(canvas, Sprites.tomb, dst);
+    } else {
+      _drawActor(canvas, cam, g.player, t);
+    }
+
+    // --- Textes flottants
+    for (final f in c.floaters) {
+      final age = (c.nowMs - f.bornMs) / GameController.floaterMs;
+      final o = cam.toScreen(f.x, f.y - age * 0.9);
+      _text(canvas, f.text, o + Offset(ts / 2, ts * 0.1), f.color.withValues(alpha: (1 - age).clamp(0, 1)),
+          f.big ? ts * 0.32 : ts * 0.26);
+    }
+
+    canvas.restore();
+
+    // --- Fondu au noir à l'arrivée sur un étage.
+    if (c.floorFade > 0) {
+      canvas.drawRect(Offset.zero & size, Paint()..color = Color.fromRGBO(0, 0, 0, c.floorFade));
+    }
+
+    // --- Fin d'épisode : bords rouges quand la démolition approche, puis pendant.
+    final left = g.turnsLeft;
+    if (left <= 20 && !g.gameOver) {
+      final strength = left < 0 ? 0.55 : 0.25 * (1 - left / 20);
+      final rect = Offset.zero & size;
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..shader = RadialGradient(
+            radius: 0.9,
+            colors: [const Color(0x00FF0000), Color.fromRGBO(200, 0, 0, strength)],
+            stops: const [0.6, 1.0],
+          ).createShader(rect),
+      );
+    }
+  }
+
+  void _drawActor(Canvas canvas, Camera cam, Actor a, double t) {
+    final ts = cam.tileSize;
+    var pos = renderPos(a);
+    Color? flash;
+    for (final e in c.turnEvents) {
+      if (e is AttackEvent) {
+        if (e.attackerId == a.id && t < 1) {
+          // Petit « bump » vers la cible.
+          final k = math.sin(t * math.pi) * 0.35;
+          pos += Offset((e.to.x - e.from.x) * k, (e.to.y - e.from.y) * k);
+        }
+        if (e.targetId == a.id && !e.miss && t < 0.7) flash = Colors.white;
+      }
+    }
+    var dst = cam.toScreen(pos.dx, pos.dy) & Size(ts, ts);
+    if (a.isBoss) {
+      // Les boss sont plus gros, posés sur la même case.
+      final big = ts * 1.45;
+      dst = Rect.fromLTWH(dst.center.dx - big / 2, dst.bottom - big, big, big);
+    }
+
+    // Ombre portée.
+    canvas.drawOval(
+      Rect.fromCenter(center: dst.bottomCenter - Offset(0, ts * 0.1), width: ts * 0.6, height: ts * 0.16),
+      Paint()..color = const Color(0x66000000),
+    );
+    if (a.isPlayer && c.levelUpGlow > 0) {
+      final k = c.levelUpGlow;
+      canvas.drawCircle(dst.center, ts * (0.5 + (1 - k) * 0.9),
+          Paint()
+            ..color = Color.fromRGBO(255, 216, 77, 0.6 * k)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = ts * 0.12);
+    }
+    if (a.isPlayer && c.game.rageTurns > 0) {
+      // Aura rouge pendant la rage.
+      canvas.drawCircle(dst.center, ts * 0.45, Paint()..color = const Color(0x55FF2020));
+    }
+    final tint = a.monster?.tint;
+    atlas.draw(canvas, a.displaySprite, dst, flash: flash, tint: tint == null ? null : Color(tint));
+    if (a.enraged) {
+      canvas.drawRect(dst, Paint()..color = const Color(0x22FF0000));
+    }
+    // Marqueurs d'altérations (petits carrés colorés).
+    var i = 0;
+    for (final s in a.statuses.keys) {
+      final r = Rect.fromLTWH(dst.left + ts * 0.05 + i * ts * 0.17, dst.top + ts * 0.02, ts * 0.14, ts * 0.14);
+      canvas.drawRect(r.inflate(1), Paint()..color = const Color(0xFF000000));
+      canvas.drawRect(r, Paint()..color = Color(s.color));
+      i++;
+    }
+
+    // Barre de vie des monstres blessés.
+    if (!a.isPlayer && !a.isBoss && a.hp < a.maxHp) {
+      final bar = Rect.fromLTWH(dst.left + ts * 0.15, dst.top - ts * 0.08, ts * 0.7, ts * 0.07);
+      canvas.drawRect(bar.inflate(1), Paint()..color = const Color(0xFF000000));
+      canvas.drawRect(bar, Paint()..color = const Color(0xFF5A1A1A));
+      canvas.drawRect(
+        Rect.fromLTWH(bar.left, bar.top, bar.width * a.hpRatio.clamp(0, 1), bar.height),
+        Paint()..color = const Color(0xFFE04040),
+      );
+    }
+  }
+
+  bool _touchesFloor(Pos p) {
+    final tiles = c.game.level.tiles;
+    for (var dy = -1; dy <= 1; dy++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        final q = Pos(p.x + dx, p.y + dy);
+        if (tiles.inBounds(q) && tiles[q].walkable) return true;
+      }
+    }
+    return false;
+  }
+
+  /// Hachage 32 bits bien mélangé : variantes de sol réparties sans grappes.
+  static int _hash(int x, int y, int f) {
+    var h = (x * 73856093) ^ (y * 19349663) ^ (f * 83492791);
+    h = ((h ^ (h >> 13)) * 0x5bd1e995) & 0xffffffff;
+    h = ((h ^ (h >> 15)) * 0x27d4eb2d) & 0xffffffff;
+    return (h ^ (h >> 16)) & 0x7fffffff;
+  }
+
+  void _text(Canvas canvas, String s, Offset center, Color color, double size) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: s,
+        style: TextStyle(
+          fontFamily: 'PressStart2P',
+          fontSize: size,
+          color: color,
+          shadows: [Shadow(color: Colors.black.withValues(alpha: color.a), offset: const Offset(1.5, 1.5))],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+  }
+
+  @override
+  bool shouldRepaint(DungeonPainter old) => true;
+}
