@@ -8,6 +8,7 @@ import '../../core/events.dart';
 import '../../core/grid.dart';
 import '../game_controller.dart';
 import '../theme.dart';
+import 'fx.dart';
 import 'sprite_atlas.dart';
 
 /// Nombre de tuiles visibles en largeur : règle le zoom.
@@ -185,12 +186,38 @@ class DungeonPainter extends CustomPainter {
       }
     }
 
+    // --- Particules et traits de coups
+    final now = c.nowMs;
+    for (final p in c.fx.particles) {
+      final age = (now - p.bornMs) / 1000;
+      final life = (now - p.bornMs) / p.lifeMs;
+      if (life >= 1 || life < 0) continue;
+      final x = p.x + p.vx * age;
+      final y = p.y + p.vy * age + 0.5 * p.gravity * age * age;
+      final o = cam.toScreen(x - 0.5, y - 0.5) + Offset(ts / 2, ts / 2);
+      final s = p.size * ts;
+      canvas.drawRect(Rect.fromCenter(center: o, width: s, height: s),
+          Paint()..color = p.color.withValues(alpha: (1 - life).clamp(0.0, 1.0)));
+    }
+    for (final sl in c.fx.slashes) {
+      final k = ((now - sl.bornMs) / Slash.lifeMs).clamp(0.0, 1.0);
+      final center = cam.toScreen(sl.x, sl.y) + Offset(ts / 2, ts / 2);
+      final len = ts * 0.45 * (0.4 + 0.6 * k);
+      final paint = Paint()
+        ..color = sl.color.withValues(alpha: 1 - k)
+        ..strokeWidth = ts * (sl.crit ? 0.11 : 0.08)
+        ..strokeCap = StrokeCap.square;
+      canvas.drawLine(center + Offset(-len, -len), center + Offset(len, len), paint);
+      if (sl.crit) canvas.drawLine(center + Offset(len, -len), center + Offset(-len, len), paint);
+    }
+
     // --- Textes flottants
     for (final f in c.floaters) {
       final age = (c.nowMs - f.bornMs) / GameController.floaterMs;
       final o = cam.toScreen(f.x, f.y - age * 0.9);
+      final pop = 1 + 0.5 * (1 - age * 6).clamp(0.0, 1.0);
       _text(canvas, f.text, o + Offset(ts / 2, ts * 0.1), f.color.withValues(alpha: (1 - age).clamp(0, 1)),
-          f.big ? ts * 0.32 : ts * 0.26);
+          (f.big ? ts * 0.32 : ts * 0.26) * pop);
     }
 
     canvas.restore();
@@ -220,7 +247,16 @@ class DungeonPainter extends CustomPainter {
   void _drawActor(Canvas canvas, Camera cam, Actor a, double t) {
     final ts = cam.tileSize;
     var pos = renderPos(a);
+    final prev = c.prevPos[a.id];
+    if (prev != null && prev != a.pos && t < 1) {
+      // Petit saut d'une case à l'autre.
+      pos += Offset(0, -math.sin(t * math.pi) * 0.15);
+    } else if ((c.idlePhase + a.id).isOdd) {
+      // Respiration : un pixel de sprite vers le haut une image sur deux.
+      pos += const Offset(0, -1 / 16);
+    }
     Color? flash;
+    if (a.primed && c.idlePhase.isOdd) flash = const Color(0xFFFF3030);
     for (final e in c.turnEvents) {
       if (e is AttackEvent) {
         if (e.attackerId == a.id && t < 1 && !e.ranged) {

@@ -110,16 +110,13 @@ class TitleScreen extends StatelessWidget {
                         onPressed: () => SettingsScreen.show(context, store),
                       ),
                     ),
-                    Center(child: Text('EN DIRECT', style: pixel(12, color: Palette.hp))),
+                    const Center(child: _LiveLabel()),
                     const SizedBox(height: 12),
                     Center(child: Text('DONJON', style: pixel(36, color: Palette.gold))),
                     const SizedBox(height: 4),
                     Center(child: Text('EN DIRECT', style: pixel(18, color: Palette.text))),
                     const SizedBox(height: 22),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [for (final s in _cast) SpriteIcon(atlas, s, size: 46)],
-                    ),
+                    _BobbingCast(atlas: atlas, sprites: _cast),
                     const SizedBox(height: 18),
                     Text(
                       p.runs == 0
@@ -258,6 +255,90 @@ extension on TitleScreen {
     final role = roleById(info['role'] as String? ?? 'lambda').name;
     final daily = info['daily'] == true ? ' · défi du jour' : '';
     return 'Étage ${info['floor']} · $role$daily';
+  }
+}
+
+/// Les monstres de l'affiche sautillent à tour de rôle, en pas de pixel.
+class _BobbingCast extends StatefulWidget {
+  const _BobbingCast({required this.atlas, required this.sprites});
+
+  final SpriteAtlas atlas;
+  final List<int> sprites;
+
+  @override
+  State<_BobbingCast> createState() => _BobbingCastState();
+}
+
+class _BobbingCastState extends State<_BobbingCast> with SingleTickerProviderStateMixin {
+  late final AnimationController _a =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 2400))..repeat();
+
+  @override
+  void dispose() {
+    _a.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _a,
+      builder: (context, _) {
+        final n = widget.sprites.length;
+        // Un seul personnage saute à la fois, en 3 positions de pixel (pas d'interpolation).
+        final slot = _a.value * n;
+        final current = slot.floor() % n;
+        final k = slot - slot.floor();
+        final hop = k < 0.5 ? (k < 0.25 ? -4.0 : -8.0) : (k < 0.75 ? -4.0 : 0.0);
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var i = 0; i < n; i++)
+              Transform.translate(
+                offset: Offset(0, i == current ? hop : 0),
+                child: SpriteIcon(widget.atlas, widget.sprites[i], size: 46),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// « ● EN DIRECT » avec un point rouge qui clignote.
+class _LiveLabel extends StatefulWidget {
+  const _LiveLabel();
+
+  @override
+  State<_LiveLabel> createState() => _LiveLabelState();
+}
+
+class _LiveLabelState extends State<_LiveLabel> with SingleTickerProviderStateMixin {
+  late final AnimationController _a =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat();
+
+  @override
+  void dispose() {
+    _a.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedBuilder(
+          animation: _a,
+          builder: (context, _) => Opacity(
+            opacity: _a.value < 0.55 ? 1 : 0.15,
+            child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Palette.hp, shape: BoxShape.circle)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text('EN DIRECT', style: pixel(12, color: Palette.hp)),
+      ],
+    );
   }
 }
 

@@ -80,6 +80,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
       c = GameController(this, seed, setup: widget.store.profile.setupFor(daily: widget.daily));
     }
     c.vibrations = widget.store.profile.vibrations;
+    c.startIdle();
     c.addListener(_watchBackstage);
     c.addListener(_watchFeature);
     c.addListener(_watchTips);

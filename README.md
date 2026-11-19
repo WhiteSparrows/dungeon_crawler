@@ -77,6 +77,14 @@ couper les conseils ou les revoir depuis le début.
 - **MAESTRO bavard** : commentaires spontanés, fausses coupures pub des sponsors, blagues après les
   éliminations, 24 questions d'interview.
 
+## Animations
+
+Particules cosmétiques (`lib/ui/render/fx.dart`, hasard séparé du moteur) : traits de coups, étincelles,
+gouttes, débris à la mort, pièces, soins, confettis (loot box, succès, sponsors), gerbe de niveau,
+explosions, poussière. Petit saut au déplacement, chiffres de dégâts qui « popent », respiration des
+personnages, bulles de poison et fumée de brûlure, kamikazes qui clignotent (animation de repos à
+~2 images/s pour épargner la batterie). Menu : monstres qui sautillent, point « EN DIRECT » qui clignote.
+
 ## Sons et musique
 
 Bruitages et deux boucles chiptune (donjon, plateau) synthétisés pour le jeu par

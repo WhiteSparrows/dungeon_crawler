@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/animation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
@@ -6,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../content/achievements.dart';
 import '../content/features.dart';
 import 'audio.dart';
+import 'render/fx.dart';
 import '../content/items.dart';
 import '../content/status.dart';
 import '../content/interviews.dart';
@@ -86,6 +89,27 @@ class GameController extends ChangeNotifier {
 
   /// Vibrations activées (réglage du profil).
   bool vibrations = true;
+
+  /// Particules et traits de coups (purement cosmétiques).
+  final fx = Fx();
+
+  /// Animation de repos : alterne lentement (respiration, bulles, clignotements).
+  int idlePhase = 0;
+  Timer? _idleTimer;
+
+  /// Lance l'animation de repos (≈ 2 images par seconde : économe en batterie).
+  void startIdle() {
+    _idleTimer ??= Timer.periodic(const Duration(milliseconds: 450), (_) {
+      idlePhase++;
+      for (final a in [game.player, ...game.monsters]) {
+        if (!a.alive || !game.visible.contains(a.pos)) continue;
+        if (a.hasStatus(Status.poison)) fx.wisp(a.pos.x.toDouble(), a.pos.y.toDouble(), nowMs, const Color(0xFF60E060));
+        if (a.hasStatus(Status.burn)) fx.wisp(a.pos.x.toDouble(), a.pos.y.toDouble(), nowMs, const Color(0xFFFF9F40));
+      }
+      if (!fx.isEmpty) _ensureTicking();
+      notifyListeners();
+    });
+  }
 
   int _fadeStartMs = -100000;
   int _levelUpMs = -100000;
@@ -344,6 +368,7 @@ class GameController extends ChangeNotifier {
 
   void _ingest(List<GameEvent> events) {
     _sounds(events);
+    _effects(events);
     for (final e in events) {
       switch (e) {
         case AttackEvent():
@@ -446,6 +471,57 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  // --------------------------------------------------------------- particules
+
+  void _effects(List<GameEvent> events) {
+    final now = nowMs;
+    final me = game.player.pos;
+    final px = me.x.toDouble(), py = me.y.toDouble();
+    for (final e in events) {
+      switch (e) {
+        case AttackEvent(:final to, :final miss, :final crit, :final targetId):
+          if (miss) break;
+          if (targetId == game.player.id) {
+            fx.hurt(to.x.toDouble(), to.y.toDouble(), now);
+          } else {
+            fx.hit(to.x.toDouble(), to.y.toDouble(), now, crit: crit);
+          }
+        case DeathEvent(:final pos, :final isPlayer):
+          fx.death(pos.x.toDouble(), pos.y.toDouble(), now, isPlayer ? const Color(0xFFE02020) : const Color(0xFFB07050));
+        case PickupEvent(:final pos, :final label):
+          if (label.startsWith('-')) break;
+          if (label.contains('or')) {
+            fx.coins(pos.x.toDouble(), pos.y.toDouble(), now);
+          } else {
+            fx.sparkle(pos.x.toDouble(), pos.y.toDouble(), now);
+          }
+        case HealEvent(:final pos):
+          fx.heal(pos.x.toDouble(), pos.y.toDouble(), now);
+        case LevelUpEvent():
+          fx.levelUp(px, py, now);
+        case BoxGainedEvent() || AchievementEvent() || SponsorGiftEvent():
+          fx.confetti(px, py, now);
+        case BossEvent(:final defeated):
+          if (defeated) fx.confetti(px, py, now);
+        case VictoryEvent():
+          for (var i = 0; i < 3; i++) {
+            fx.confetti(px + i - 1, py, now);
+          }
+        case KamikazeEvent(:final pos, :final exploded):
+          if (exploded) fx.explosion(pos.x.toDouble(), pos.y.toDouble(), now);
+        case TrapEvent(:final pos, :final triggered):
+          if (triggered) fx.dust(pos.x.toDouble(), pos.y.toDouble(), now);
+        case DemolitionEvent():
+          fx.dust(px, py - 0.5, now);
+        case StatusDamageEvent(:final pos, :final statusIndex):
+          final c = Color(Status.values[statusIndex].color);
+          fx.burst(pos.x.toDouble(), pos.y.toDouble(), now, colors: [c], n: 5, speed: 1.2, life: 450, upward: 1);
+        default:
+          break;
+      }
+    }
+  }
+
   // --------------------------------------------------------------- sons
 
   /// Un son par type d'événement et par tour (évite la cacophonie).
@@ -511,12 +587,19 @@ class GameController extends ChangeNotifier {
   void _onTick(Duration elapsed) {
     nowMs = (_base + elapsed).inMilliseconds;
     floaters.removeWhere((f) => nowMs - f.bornMs > floaterMs);
+    fx.prune(nowMs);
     final turnDone = turnT >= 1;
     if (turnDone && _autoPath.isNotEmpty) {
       _stepAuto();
     }
     notifyListeners();
-    if (turnDone && floaters.isEmpty && shake == 0 && _autoPath.isEmpty && floorFade == 0 && levelUpGlow == 0) {
+    if (turnDone &&
+        floaters.isEmpty &&
+        fx.isEmpty &&
+        shake == 0 &&
+        _autoPath.isEmpty &&
+        floorFade == 0 &&
+        levelUpGlow == 0) {
       _base += elapsed;
       _ticker.stop();
     }
@@ -524,6 +607,7 @@ class GameController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _idleTimer?.cancel();
     _ticker.dispose();
     super.dispose();
   }
