@@ -57,7 +57,8 @@ void main() {
     g.monsters.add(Actor(
         id: 900, name: def.name, sprite: def.sprite, pos: g.player.pos + d.delta, maxHp: 5, atk: 1, def: 0, monster: def));
     expect(nextInGameTip(g, {'welcome', 'move'}), 'monster');
-    expect(nextInGameTip(g, {'welcome', 'move', 'monster'}), 'skill', reason: 'monstre au contact, pouvoir prêt');
+    expect(nextInGameTip(g, {'welcome', 'move', 'monster'}), 'combat', reason: 'monstre au contact');
+    expect(nextInGameTip(g, {'welcome', 'move', 'monster', 'combat'}), 'skill', reason: 'pouvoir prêt');
   });
 
   test('fin de partie : seul le conseil de fin', () {

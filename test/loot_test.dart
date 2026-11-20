@@ -131,7 +131,7 @@ void main() {
 
   test('sac plein : les objets restent au sol', () {
     final g = _calmGame(10);
-    for (final w in weapons.skip(1).take(Game.maxSlots - g.inventory.length)) {
+    for (final w in [...weapons.skip(1), ...trinkets, ...rangedWeapons].take(g.maxSlots - g.inventory.length)) {
       g.inventory.add(InvItem(w));
     }
     expect(g.bagFull, isTrue);
@@ -139,5 +139,17 @@ void main() {
     g.floorItems.add(FloorItem.item(trinkets.first, g.player.pos + d.delta));
     g.act(MoveAction(d));
     expect(g.floorItems.length, 1);
+  });
+
+  test('le sac grandit : niveaux, objets et contrat', () {
+    final g = Game.newRun(20);
+    expect(g.maxSlots, Game.baseSlots);
+    g.playerLevel = 6;
+    expect(g.maxSlots, Game.baseSlots + 4);
+    g.inventory.add(InvItem(touristPouch));
+    g.act(const UseItemAction('tourist_pouch'));
+    expect(g.maxSlots, Game.baseSlots + 4 + 3);
+    final rich = Game.newRun(20, setup: const RunSetup(upgrades: {'pockets': 3}));
+    expect(rich.maxSlots, Game.baseSlots + 6);
   });
 }

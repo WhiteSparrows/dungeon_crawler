@@ -2,6 +2,7 @@
 // Simulateur d'équilibrage : un bot « raisonnable » joue des centaines de runs.
 // Usage : dart run tool/balance.dart [runs] [roleId]
 import 'package:donjon_en_direct/content/items.dart';
+import 'package:donjon_en_direct/content/monsters.dart';
 import 'package:donjon_en_direct/core/entities.dart';
 import 'package:donjon_en_direct/core/game.dart';
 import 'package:donjon_en_direct/core/grid.dart';
@@ -69,6 +70,31 @@ Result playOne(int seed, RunSetup setup) {
       }
     }
     final adj = g.monsters.where((m) => m.pos.isAdjacent4(g.player.pos) && !m.disguised).toList();
+    // Parer un coup lourd annoncé.
+    if (adj.any((m) => g.intentOf(m) == MonsterIntent.heavy) && g.stamina >= 2) {
+      g.act(const ParryAction());
+      continue;
+    }
+    // Abattre les tireurs et soigneurs à distance.
+    final shooters = g.monsters
+        .where((m) =>
+            !m.disguised &&
+            g.visible.contains(m.pos) &&
+            !m.pos.isAdjacent4(g.player.pos) &&
+            (m.monster!.behavior == Behavior.ranged || m.monster!.behavior == Behavior.healer) &&
+            g.ranged != null &&
+            m.pos.chebyshev(g.player.pos) <= g.ranged!.range)
+        .toList();
+    if (shooters.isNotEmpty && g.ammoCount > 0 && (!g.ranged!.magic || g.stamina >= 2)) {
+      final t = g.turn;
+      g.act(ShootAction(shooters.first.id));
+      if (g.turn != t) continue;
+    }
+    if (adj.isNotEmpty && g.stamina >= 4) {
+      final t = g.turn;
+      g.act(HeavyAction(Dir.fromDelta(adj.first.pos - g.player.pos)!));
+      if (g.turn != t) continue;
+    }
     final wantsSkill = switch (g.skill.id) {
       'roll' || 'bribe' => g.player.hpRatio < 0.4 && adj.isNotEmpty,
       _ => adj.isNotEmpty || g.player.hpRatio < 0.5,

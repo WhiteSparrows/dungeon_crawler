@@ -47,7 +47,11 @@ class MonsterDef {
     this.summonEvery = 0,
     this.enrage = false,
     this.range = 0,
+    this.heavy = false,
   });
+
+  /// Prépare un coup lourd un tour à l'avance (dégâts doublés si on reste au contact).
+  final bool heavy;
 
   /// Portée de tir (comportement [Behavior.ranged]).
   final int range;
@@ -139,7 +143,8 @@ const monsterDefs = <MonsterDef>[
       def: 1,
       xp: 7,
       minFloor: 2,
-      weight: 6),
+      weight: 6,
+      heavy: true),
   MonsterDef(id: 'bandit', name: 'Pillard en tongs', sprite: Sprites.bandit, hp: 15, atk: 5, def: 1, xp: 7, minFloor: 3),
   MonsterDef(
       id: 'mimic',
@@ -177,7 +182,8 @@ const monsterDefs = <MonsterDef>[
       def: 2,
       xp: 11,
       minFloor: 4,
-      feminine: true),
+      feminine: true,
+      heavy: true),
   MonsterDef(
       id: 'carny',
       name: 'Forain arnaqueur',
@@ -251,9 +257,11 @@ const monsterDefs = <MonsterDef>[
       def: 4,
       xp: 15,
       behavior: Behavior.slow,
-      minFloor: 7),
+      minFloor: 7,
+      heavy: true),
   MonsterDef(
-      id: 'cyclops', name: 'Cyclope videur', sprite: Sprites.cyclops, hp: 44, atk: 12, def: 3, xp: 18, minFloor: 8, weight: 6),
+      id: 'cyclops', name: 'Cyclope videur', sprite: Sprites.cyclops, hp: 44, atk: 12, def: 3, xp: 18, minFloor: 8, weight: 6,
+      heavy: true),
 
   // ---------------------------------------------------------------- Plateau télé (10-12)
   MonsterDef(
@@ -291,7 +299,8 @@ const monsterDefs = <MonsterDef>[
       def: 4,
       xp: 22,
       minFloor: 10,
-      feminine: true),
+      feminine: true,
+      heavy: true),
   MonsterDef(
       id: 'lightghost',
       name: 'Spectre du projecteur',
@@ -355,7 +364,8 @@ const monsterDefs = <MonsterDef>[
       xp: 30,
       minFloor: 14,
       onHit: OnHit.steal,
-      onHitChance: 0.4),
+      onHitChance: 0.4,
+      heavy: true),
 
   // ---------------------------------------------------------------- Monstres tactiques
   MonsterDef(
@@ -501,8 +511,8 @@ const monsterDefs = <MonsterDef>[
       name: 'Bobo, clown pyromane',
       sprite: 88,
       tint: 0xFFFF6060,
-      hp: 95,
-      atk: 10,
+      hp: 140,
+      atk: 12,
       def: 3,
       xp: 70,
       minFloor: 6,
@@ -510,15 +520,16 @@ const monsterDefs = <MonsterDef>[
       boss: true,
       onHit: OnHit.burn,
       onHitChance: 0.35,
-      enrage: true),
+      enrage: true,
+      heavy: true),
   MonsterDef(
       id: 'boss_guard',
       name: 'Vigile Suprême',
       sprite: 97,
       tint: 0xFFFFD84D,
-      hp: 150,
-      atk: 14,
-      def: 5,
+      hp: 220,
+      atk: 16,
+      def: 6,
       xp: 100,
       minFloor: 9,
       weight: 0,
@@ -526,15 +537,16 @@ const monsterDefs = <MonsterDef>[
       onHit: OnHit.stun,
       onHitChance: 0.25,
       summon: 'guard',
-      summonEvery: 7),
+      summonEvery: 7,
+      heavy: true),
   MonsterDef(
       id: 'boss_host',
       name: 'Présentatrice rivale',
       sprite: 99,
       tint: 0xFFC77DFF,
-      hp: 220,
-      atk: 17,
-      def: 5,
+      hp: 300,
+      atk: 20,
+      def: 6,
       xp: 140,
       minFloor: 12,
       weight: 0,
@@ -549,9 +561,9 @@ const monsterDefs = <MonsterDef>[
       name: 'Directeur des Programmes',
       sprite: 111,
       tint: 0xFFFF4040,
-      hp: 300,
-      atk: 21,
-      def: 7,
+      hp: 420,
+      atk: 25,
+      def: 8,
       xp: 200,
       minFloor: 15,
       weight: 0,
@@ -560,7 +572,8 @@ const monsterDefs = <MonsterDef>[
       onHitChance: 0.35,
       summon: 'clerk',
       summonEvery: 4,
-      enrage: true),
+      enrage: true,
+      heavy: true),
 ];
 
 MonsterDef monsterById(String id) => monsterDefs.firstWhere((m) => m.id == id);

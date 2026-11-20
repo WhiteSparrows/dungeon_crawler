@@ -195,7 +195,7 @@ class _LootBoxDialogState extends State<LootBoxDialog> with TickerProviderStateM
         ),
         child: Row(
           children: [
-            SpriteIcon(widget.atlas, g.spriteOf(d), size: 36),
+            SpriteIcon(widget.atlas, g.spriteOf(d), size: 36, tint: g.tintOf(d)),
             const SizedBox(width: 10),
             Expanded(
               child: Column(

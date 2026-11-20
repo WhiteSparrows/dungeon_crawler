@@ -38,26 +38,31 @@ class SpriteAtlas {
 
 /// Petit widget pour afficher un sprite dans l'interface.
 class SpriteIcon extends StatelessWidget {
-  const SpriteIcon(this.atlas, this.index, {super.key, this.size = 32});
+  const SpriteIcon(this.atlas, this.index, {super.key, this.size = 32, this.tint});
 
   final SpriteAtlas atlas;
   final int index;
   final double size;
 
+  /// Teinte optionnelle (variantes de couleur).
+  final int? tint;
+
   @override
   Widget build(BuildContext context) =>
-      CustomPaint(size: Size.square(size), painter: _SpritePainter(atlas, index));
+      CustomPaint(size: Size.square(size), painter: _SpritePainter(atlas, index, tint));
 }
 
 class _SpritePainter extends CustomPainter {
-  _SpritePainter(this.atlas, this.index);
+  _SpritePainter(this.atlas, this.index, this.tint);
 
   final SpriteAtlas atlas;
   final int index;
+  final int? tint;
 
   @override
-  void paint(Canvas canvas, Size size) => atlas.draw(canvas, index, Offset.zero & size);
+  void paint(Canvas canvas, Size size) =>
+      atlas.draw(canvas, index, Offset.zero & size, tint: tint == null ? null : Color(tint!));
 
   @override
-  bool shouldRepaint(_SpritePainter old) => old.index != index;
+  bool shouldRepaint(_SpritePainter old) => old.index != index || old.tint != tint;
 }

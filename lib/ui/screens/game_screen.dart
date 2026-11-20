@@ -235,6 +235,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
       c.descend();
     } else if (k == LogicalKeyboardKey.keyP) {
       c.quaff();
+    } else if (k == LogicalKeyboardKey.keyH) {
+      c.setMode(CombatMode.heavy);
+    } else if (k == LogicalKeyboardKey.keyG) {
+      c.setMode(CombatMode.shove);
+    } else if (k == LogicalKeyboardKey.keyF) {
+      c.parry();
+    } else if (k == LogicalKeyboardKey.keyT) {
+      c.toggleShoot();
     } else if (k == LogicalKeyboardKey.keyK) {
       c.skill();
     } else if (k == LogicalKeyboardKey.keyI) {
@@ -350,6 +358,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
                   ),
                 ),
                 _Log(c: c),
+                _CombatBar(c: c, atlas: widget.atlas),
                 _ActionBar(c: c, atlas: widget.atlas, onBag: _openBag),
               ],
             ),
@@ -522,6 +531,102 @@ class _ShowBar extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------ Barre de combat
+
+class _CombatBar extends StatelessWidget {
+  const _CombatBar({required this.c, required this.atlas});
+
+  final GameController c;
+  final SpriteAtlas atlas;
+
+  @override
+  Widget build(BuildContext context) {
+    final g = c.game;
+    final w = g.ranged;
+    final aiming = c.targeting != null;
+    final throwing = c.targeting?.isThrow ?? false;
+    final shootLabel = w == null ? 'TIRER' : (w.magic ? 'SORT' : 'TIRER ${g.ammoCount}');
+    return Container(
+      color: const Color(0xFF1A1424),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      child: Row(
+        children: [
+          // Endurance
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('ENDU', style: pixel(5, color: Palette.muted)),
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  for (var i = 0; i < Game.maxStamina; i++)
+                    Container(
+                      width: 7,
+                      height: 12,
+                      margin: const EdgeInsets.only(right: 2),
+                      color: i < g.stamina ? const Color(0xFF5EC8FF) : Colors.black,
+                    ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(width: 6),
+          _ModeButton(
+              label: 'LOURD 2',
+              active: c.mode == CombatMode.heavy,
+              enabled: g.stamina >= 2,
+              onTap: () => c.setMode(CombatMode.heavy)),
+          _ModeButton(
+              label: 'POUSSER 1',
+              active: c.mode == CombatMode.shove,
+              enabled: g.stamina >= 1,
+              onTap: () => c.setMode(CombatMode.shove)),
+          _ModeButton(label: 'PARER 2', active: false, enabled: g.stamina >= 2, onTap: c.parry),
+          _ModeButton(
+            label: throwing ? 'ANNULER' : shootLabel,
+            active: aiming,
+            enabled: throwing || (w != null && g.ammoCount > 0 && (!w.magic || g.stamina >= 2)),
+            onTap: throwing ? c.toggleShoot : c.toggleShoot,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeButton extends StatelessWidget {
+  const _ModeButton({required this.label, required this.active, required this.enabled, required this.onTap});
+
+  final String label;
+  final bool active;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFFFF9F40);
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Material(
+          color: active ? accent.withValues(alpha: 0.25) : const Color(0xFF2E2540),
+          shape: Border.all(color: active ? accent : Palette.panelBorder, width: 2),
+          child: InkWell(
+            onTap: enabled || active ? onTap : null,
+            child: Opacity(
+              opacity: enabled || active ? 1 : 0.35,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                child: Center(child: Text(label, style: pixel(6, color: active ? accent : Palette.text))),
+              ),
+            ),
+          ),
         ),
       ),
     );

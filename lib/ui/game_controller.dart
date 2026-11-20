@@ -13,6 +13,7 @@ import '../content/items.dart';
 import '../content/status.dart';
 import '../content/interviews.dart';
 import '../core/backstage.dart';
+import '../core/entities.dart';
 import '../core/events.dart';
 import '../core/game.dart';
 import '../core/grid.dart';
@@ -33,6 +34,20 @@ class LogLine {
   const LogLine(this.text, this.kind);
   final String text;
   final MessageKind kind;
+}
+
+/// Coup appliqué au prochain contact avec un monstre.
+enum CombatMode { quick, heavy, shove }
+
+/// Visée en cours : tir avec l'arme à distance, ou lancer d'un objet.
+class Targeting {
+  const Targeting.shoot()
+      : itemId = null,
+        range = 0;
+  const Targeting.throwing(this.itemId, this.range);
+  final String? itemId;
+  final int range;
+  bool get isThrow => itemId != null;
 }
 
 /// Fait le lien entre le moteur (pur Dart) et l'écran : animations, déplacement auto, journal.
@@ -159,7 +174,13 @@ class GameController extends ChangeNotifier {
 
   void move(Dir dir) {
     _autoPath = [];
-    _perform(MoveAction(dir));
+    targeting = null;
+    final m = game.monsterAt(game.player.pos + dir.delta);
+    if (m != null && !m.disguised) {
+      _bump(dir);
+    } else {
+      _perform(MoveAction(dir));
+    }
   }
 
   void wait() {
@@ -175,6 +196,66 @@ class GameController extends ChangeNotifier {
   void quaff() {
     _autoPath = [];
     _perform(const QuaffAction());
+  }
+
+  // --------------------------------------------------------------- combat tactique
+
+  CombatMode mode = CombatMode.quick;
+  Targeting? targeting;
+
+  /// Choisit le coup du prochain contact (re-toucher le même mode revient au coup rapide).
+  void setMode(CombatMode m) {
+    mode = mode == m ? CombatMode.quick : m;
+    targeting = null;
+    notifyListeners();
+  }
+
+  void parry() {
+    _autoPath = [];
+    targeting = null;
+    _perform(const ParryAction());
+  }
+
+  /// Active / annule la visée de l'arme à distance.
+  void toggleShoot() {
+    targeting = targeting != null && !targeting!.isThrow ? null : const Targeting.shoot();
+    mode = CombatMode.quick;
+    notifyListeners();
+  }
+
+  /// Visée pour lancer un objet du sac.
+  void startThrow(String itemId, int range) {
+    targeting = Targeting.throwing(itemId, range);
+    mode = CombatMode.quick;
+    notifyListeners();
+  }
+
+  /// Portée de la visée en cours.
+  int get targetRange {
+    final t = targeting;
+    if (t == null) return 0;
+    return t.isThrow ? t.range : (game.ranged?.range ?? 0);
+  }
+
+  /// Monstres qu'on peut viser maintenant.
+  bool canTarget(Actor m) =>
+      targeting != null &&
+      m.alive &&
+      !m.disguised &&
+      game.visible.contains(m.pos) &&
+      m.pos.chebyshev(game.player.pos) <= targetRange;
+
+  /// Coup au contact selon le mode choisi (puis retour au coup rapide).
+  void _bump(Dir dir) {
+    switch (mode) {
+      case CombatMode.heavy:
+        _perform(HeavyAction(dir));
+      case CombatMode.shove:
+        _perform(ShoveAction(dir));
+      case CombatMode.quick:
+        _perform(MoveAction(dir));
+    }
+    mode = CombatMode.quick;
   }
 
   /// Interrompt le déplacement automatique (ex. : un conseil s'affiche).
@@ -295,6 +376,18 @@ class GameController extends ChangeNotifier {
   /// Tap sur une case : attaque/pas si adjacente, sinon déplacement automatique.
   void tapTile(Pos target) {
     if (game.gameOver) return;
+    // Visée : toucher une cible valide tire / lance, toucher ailleurs annule.
+    final t = targeting;
+    if (t != null) {
+      final m = game.monsterAt(target);
+      targeting = null;
+      if (m != null && canTargetAfterReset(m, t)) {
+        _perform(t.isThrow ? ThrowAction(t.itemId!, m.id) : ShootAction(m.id));
+      } else {
+        notifyListeners();
+      }
+      return;
+    }
     final p = game.player.pos;
     if (target == p) {
       game.onStairs ? descend() : wait();
@@ -323,6 +416,11 @@ class GameController extends ChangeNotifier {
     _autoPath = path;
     _autoKnownMonsters = _visibleMonsterIds();
     _stepAuto();
+  }
+
+  bool canTargetAfterReset(Actor m, Targeting t) {
+    final range = t.isThrow ? t.range : (game.ranged?.range ?? 0);
+    return m.alive && !m.disguised && game.visible.contains(m.pos) && m.pos.chebyshev(game.player.pos) <= range;
   }
 
   void _stepAuto() {

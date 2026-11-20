@@ -10,8 +10,9 @@ class AttackResult {
 
 /// Résout une attaque au contact. 85 % de toucher, [critChance] de critique (x2),
 /// dégâts = (atk + bonus aléatoire - def) x [multiplier], minimum 1.
-AttackResult resolveAttack(Actor attacker, Actor target, Rng rng, {double critChance = 0.10, int multiplier = 1}) {
-  if (!rng.chance(0.85)) return const AttackResult(0, miss: true);
+AttackResult resolveAttack(Actor attacker, Actor target, Rng rng,
+    {double critChance = 0.10, int multiplier = 1, bool sure = false}) {
+  if (!sure && !rng.chance(0.85)) return const AttackResult(0, miss: true);
   final bonus = rng.range(0, (attacker.atk / 2).ceil());
   var dmg = (attacker.atk + bonus - target.def) * multiplier;
   if (dmg < 1) dmg = 1;

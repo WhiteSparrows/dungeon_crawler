@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../content/sprites.dart';
 import '../../core/entities.dart';
 import '../../core/events.dart';
+import '../../core/game.dart';
 import '../../core/grid.dart';
 import '../game_controller.dart';
 import '../theme.dart';
@@ -106,7 +107,9 @@ class DungeonPainter extends CustomPainter {
         canvas.drawCircle(dst.center, ts * 0.32,
             Paint()..color = Color(it.item!.rarity.color).withValues(alpha: 0.22));
       }
-      atlas.draw(canvas, sprite, dst.deflate(ts * 0.12), opacity: seen ? 1 : 0.45);
+      final itemTint = it.item == null ? null : g.tintOf(it.item!);
+      atlas.draw(canvas, sprite, dst.deflate(ts * 0.12),
+          opacity: seen ? 1 : 0.45, tint: itemTint == null ? null : Color(itemTint));
     }
 
     // --- Coffres (et mimiques déguisées, indiscernables)
@@ -166,6 +169,8 @@ class DungeonPainter extends CustomPainter {
     for (final m in g.monsters) {
       if (!g.visible.contains(m.pos) || m.disguised) continue;
       _drawActor(canvas, cam, m, t);
+      if (t >= 1 && !g.gameOver) _drawIntent(canvas, cam, m);
+      if (c.canTarget(m)) _drawReticle(canvas, cam, m.pos);
     }
     if (g.gameOver) {
       final dst = cam.toScreen(g.player.pos.x.toDouble(), g.player.pos.y.toDouble()) & Size(ts, ts);
@@ -323,6 +328,55 @@ class DungeonPainter extends CustomPainter {
         Rect.fromLTWH(bar.left, bar.top, bar.width * a.hpRatio.clamp(0, 1), bar.height),
         Paint()..color = const Color(0xFFE04040),
       );
+    }
+  }
+
+  /// Icône d'intention au-dessus du monstre (ce qu'il fera si on ne bouge pas).
+  void _drawIntent(Canvas canvas, Camera cam, Actor m) {
+    final (String glyph, Color color) = switch (c.game.intentOf(m)) {
+      MonsterIntent.melee => ('!', const Color(0xFFFF5050)),
+      MonsterIntent.prepare => ('...', const Color(0xFFFF9F40)),
+      MonsterIntent.heavy => ('!!', const Color(0xFFFF2020)),
+      MonsterIntent.shoot => ('>', const Color(0xFFFFE070)),
+      MonsterIntent.reload => ('...', const Color(0xFF9A9A9A)),
+      MonsterIntent.explode => ('**', const Color(0xFFFF4040)),
+      MonsterIntent.heal => ('+', const Color(0xFF60FF80)),
+      MonsterIntent.flee => ('<', const Color(0xFFFFFFFF)),
+      MonsterIntent.sleep => ('z', const Color(0xFF8090FF)),
+      MonsterIntent.erratic => ('?', const Color(0xFFC77DFF)),
+      MonsterIntent.none => ('', const Color(0x00000000)),
+    };
+    if (glyph.isEmpty) return;
+    final ts = cam.tileSize;
+    final o = cam.toScreen(m.pos.x.toDouble(), m.pos.y.toDouble());
+    final r = Rect.fromCenter(center: o + Offset(ts * 0.82, ts * 0.02), width: ts * 0.42, height: ts * 0.3);
+    canvas.drawRect(r, Paint()..color = const Color(0xCC000000));
+    canvas.drawRect(
+        r,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5);
+    _text(canvas, glyph, r.center, color, ts * 0.2);
+  }
+
+  /// Cible possible pendant la visée.
+  void _drawReticle(Canvas canvas, Camera cam, Pos p) {
+    final ts = cam.tileSize;
+    final r = (cam.toScreen(p.x.toDouble(), p.y.toDouble()) & Size(ts, ts)).deflate(ts * 0.04);
+    final paint = Paint()
+      ..color = const Color(0xFFFFE070)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = ts * 0.06;
+    final k = ts * 0.28;
+    for (final (corner, dx, dy) in [
+      (r.topLeft, 1.0, 1.0),
+      (r.topRight, -1.0, 1.0),
+      (r.bottomLeft, 1.0, -1.0),
+      (r.bottomRight, -1.0, -1.0),
+    ]) {
+      canvas.drawLine(corner, corner + Offset(k * dx, 0), paint);
+      canvas.drawLine(corner, corner + Offset(0, k * dy), paint);
     }
   }
 

@@ -23,6 +23,8 @@ String signature(Game g) => [
       g.playerLevel,
       g.weapon?.id,
       g.skillCooldown,
+      g.stamina,
+      g.ranged?.id,
       g.trinket?.id,
       [for (final i in g.inventory) '${i.def.id}x${i.count}'].join(','),
       [for (final m in g.monsters) '${m.monster!.id}@${m.pos}:${m.hp}'].join(','),
@@ -59,7 +61,16 @@ void play(Game g, Rng r, int steps) {
     for (final inv in List<InvItem>.of(g.inventory)) {
       if (inv.def.equippable && r.chance(0.5)) g.act(EquipAction(inv.def.id));
     }
-    if (g.skillReady && r.chance(0.15)) {
+    final near = g.monsters.where((m) => !m.disguised && g.visible.contains(m.pos)).toList();
+    final adj = near.where((m) => m.pos.isAdjacent4(g.player.pos)).toList();
+    if (adj.isNotEmpty && r.chance(0.3)) {
+      final d = Dir.fromDelta(adj.first.pos - g.player.pos)!;
+      g.act(r.chance(0.5) ? HeavyAction(d) : ShoveAction(d));
+    } else if (near.isNotEmpty && r.chance(0.2)) {
+      g.act(ShootAction(near.first.id));
+    } else if (r.chance(0.05)) {
+      g.act(const ParryAction());
+    } else if (g.skillReady && r.chance(0.15)) {
       g.act(const SkillAction());
     } else if (g.player.hpRatio < 0.4 && g.healPotions > 0) {
       g.act(const QuaffAction());

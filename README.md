@@ -12,7 +12,7 @@ un animateur cabotin. Objectif : descendre le plus bas possible.
 - **SAC** : équiper une arme / un accessoire, boire, jeter (chaque action prend un tour).
 - **Coffre clignotant** (en bas à droite) : ouvrir ses loot boxes (gratuit, hors tour).
 - Clavier (PC) : flèches / ZQSD / WASD, `Espace` attendre, `Entrée` descendre, `P` potion de soin,
-  `I` sac, `B` loot box, `K` pouvoir, `R` rejouer.
+  `I` sac, `B` loot box, `K` pouvoir, `H` coup lourd, `G` pousser, `F` parer, `T` tirer, `R` rejouer.
 - **Trophée** (en haut) : tableau d'honneur des succès, commentés par MAESTRO.
 - **Barre du show** (sous les PV) : audience, hype, tours avant démolition, jauges des sponsors.
   La toucher ouvre la régie (sponsors, talents).
@@ -55,6 +55,21 @@ mécanique apparaît : déplacements, bandeau, premier monstre, pouvoir, potions
 lieux, pièges, escalier, compte à rebours, hype, sponsors, altérations, boss, interview, coulisses, fin
 de run, Loge. Le choix du conseil est fait par `nextInGameTip` (`lib/ui/tutorial.dart`). Réglages :
 couper les conseils ou les revoir depuis le début.
+
+## Combat tactique
+
+- **Intentions** : une étiquette au-dessus de chaque monstre annonce son prochain geste (« ! » frappe,
+  « ... » orange prépare un coup lourd, « !! » l'abat, « > » tire, « ... » gris recharge, « ** » explose,
+  « + » soigne, « < » fuit, « z » sonné).
+- **Endurance** (5 points, remonte seule, plus vite en attendant) et **barre de combat** : LOURD (2),
+  POUSSER (1, projette de 2 cases et déséquilibre), PARER (2, bloque le prochain coup au contact et
+  riposte à coup sûr), TIRER.
+- **Distance** : emplacement dédié (lance-pierre de départ, arcs, arbalète, cloueuse, canon à confettis)
+  avec munitions (cailloux, flèches), baguettes et grimoires qui coûtent de l'endurance, objets à lancer
+  (couteau, brique, bocal, bombe, sauce piquante) depuis le sac.
+- Les tireurs ennemis rechargent après chaque tir et ne reculent jamais deux tours de suite.
+- **Sac** : 12 places, +2 tous les 3 niveaux, banane de touriste (+3), sac de randonnée (+6), contrat
+  « Poches cousues main » (+2 par niveau).
 
 ## Compétences et monstres tactiques
 

@@ -64,6 +64,39 @@ class SkillAction extends PlayerAction {
   const SkillAction();
 }
 
+/// Coup lourd (2 endurance) sur le monstre au contact dans la direction [dir].
+class HeavyAction extends PlayerAction {
+  const HeavyAction(this.dir);
+  final Dir dir;
+}
+
+/// Repousse le monstre au contact de 2 cases (1 endurance).
+class ShoveAction extends PlayerAction {
+  const ShoveAction(this.dir);
+  final Dir dir;
+}
+
+/// Garde (1 endurance) : annule le prochain coup au contact ce tour et riposte.
+class ParryAction extends PlayerAction {
+  const ParryAction();
+}
+
+/// Tir avec l'arme à distance sur le monstre [targetId].
+class ShootAction extends PlayerAction {
+  const ShootAction(this.targetId);
+  final int targetId;
+}
+
+/// Lance l'objet [itemId] sur le monstre [targetId].
+class ThrowAction extends PlayerAction {
+  const ThrowAction(this.itemId, this.targetId);
+  final String itemId;
+  final int targetId;
+}
+
+/// Ce qu'un monstre s'apprête à faire si le joueur ne bouge pas (affiché au-dessus de lui).
+enum MonsterIntent { none, melee, prepare, heavy, shoot, reload, explode, heal, flee, sleep, erratic }
+
 class DropAction extends PlayerAction {
   const DropAction(this.itemId);
   final String itemId;
@@ -135,6 +168,9 @@ class Game {
     rng.shuffle(sp);
     show = Show(sp.take(3).toList());
     weapon = itemById('butter_knife');
+    // Tout le monde part avec un lance-pierre : on n'est jamais démuni face à un tireur.
+    ranged = itemById('slingshot');
+    inventory.add(InvItem(stones, 10));
     final potions = 1 + role.potions + setup.level('kit');
     if (potions > 0) inventory.add(InvItem(healPotion, potions));
     for (var i = 0; i < role.mysteryPotions; i++) {
@@ -155,7 +191,14 @@ class Game {
   }
 
   static const fovRadius = 7;
-  static const maxSlots = 10;
+  /// Taille de base du sac.
+  static const baseSlots = 12;
+
+  /// Places gagnées pendant la run (banane, sac de rando).
+  int bagBonus = 0;
+
+  /// Taille du sac : base + 2 places tous les 3 niveaux + objets + contrat « poches ».
+  int get maxSlots => baseSlots + (playerLevel ~/ 3) * 2 + bagBonus + 2 * setup.level('pockets');
 
   final Rng rng;
   final RunSetup setup;
@@ -198,6 +241,34 @@ class Game {
   /// Boss de l'étage (étages 3, 6, 9, 12, 15).
   Actor? boss;
   bool _bossAnnounced = false;
+
+  // Combat tactique
+  ItemDef? ranged;
+  static const maxStamina = 5;
+  int stamina = maxStamina;
+  bool _spentStamina = false;
+  bool _parrying = false;
+
+  void _spend(int n) {
+    stamina -= n;
+    _spentStamina = true;
+  }
+
+  /// Monstre visible et vivant d'identifiant [id], ou null.
+  Actor? visibleMonster(int id) {
+    for (final m in monsters) {
+      if (m.id == id && m.alive && !m.disguised && visible.contains(m.pos)) return m;
+    }
+    return null;
+  }
+
+  /// Munitions disponibles pour l'arme à distance (illimité pour la magie).
+  int get ammoCount {
+    final w = ranged;
+    if (w == null) return 0;
+    if (w.magic) return 999;
+    return _inv(w.ammo!)?.count ?? 0;
+  }
 
   // Compétence active
   int skillCooldown = 0;
@@ -307,6 +378,9 @@ class Game {
 
   int spriteOf(ItemDef d) => d.mystery ? _looks[d.effect]!.$2 : d.sprite;
 
+  /// Teinte d'un objet (aucune pour les fioles mystère).
+  int? tintOf(ItemDef d) => d.mystery ? null : d.tint;
+
   Actor? monsterAt(Pos p) {
     for (final m in monsters) {
       if (m.pos == p && m.alive) return m;
@@ -398,6 +472,9 @@ class Game {
         _useItem(healPotion, events);
       case UseItemAction(:final itemId):
         final inv = _inv(itemId);
+        if (inv != null && inv.def.kind == ItemKind.throwable) {
+          return [const MessageEvent('Ça se lance : utilisez LANCER puis touchez une cible.')];
+        }
         if (inv == null || inv.def.kind != ItemKind.consumable) return const [];
         _useItem(inv.def, events);
       case EquipAction(:final itemId):
@@ -405,17 +482,78 @@ class Game {
         if (inv == null || !inv.def.equippable) return const [];
         _equip(inv.def, events);
       case UnequipAction(:final slot):
-        final current = slot == ItemKind.weapon ? weapon : trinket;
+        final current = switch (slot) {
+          ItemKind.weapon => weapon,
+          ItemKind.ranged => ranged,
+          _ => trinket,
+        };
         if (current == null) return const [];
         if (bagFull && _inv(current.id) == null) return [const MessageEvent('Sac plein : impossible de retirer.')];
-        if (slot == ItemKind.weapon) {
-          weapon = null;
-        } else {
-          trinket = null;
+        switch (slot) {
+          case ItemKind.weapon:
+            weapon = null;
+          case ItemKind.ranged:
+            ranged = null;
+          default:
+            trinket = null;
         }
         _addToBag(current);
         _recalcStats();
         events.add(MessageEvent('Vous retirez ${current.name}.'));
+      case HeavyAction(:final dir):
+        final m = monsterAt(player.pos + dir.delta);
+        if (m == null || m.disguised) return [const MessageEvent('Rien à frapper par là.')];
+        if (stamina < 2) return [const MessageEvent("Pas assez d'endurance pour un coup lourd (2 points).")];
+        _spend(2);
+        events.add(const MessageEvent('COUP LOURD !', MessageKind.good));
+        _attack(player, m, events, power: 1.6);
+        if (m.alive && rng.chance(0.2)) _applyStatus(m, Status.stun, events);
+      case ShoveAction(:final dir):
+        final m = monsterAt(player.pos + dir.delta);
+        if (m == null || m.disguised) return [const MessageEvent('Personne à repousser par là.')];
+        if (stamina < 1) return [const MessageEvent("Pas assez d'endurance pour repousser (1 point).")];
+        _spend(1);
+        _shove(m, dir, events);
+      case ParryAction():
+        if (stamina < 2) return [const MessageEvent("Pas assez d'endurance pour parer (2 points).")];
+        _spend(2);
+        _parrying = true;
+        events.add(const MessageEvent('Vous vous mettez en garde.', MessageKind.good));
+      case ShootAction(:final targetId):
+        final w = ranged;
+        if (w == null) return [const MessageEvent('Aucune arme à distance équipée.')];
+        final m = visibleMonster(targetId);
+        if (m == null || m.pos.chebyshev(player.pos) > w.range) {
+          return [const MessageEvent('Cible hors de portée ou hors de vue.')];
+        }
+        if (w.magic) {
+          if (stamina < 2) return [const MessageEvent("Pas assez d'endurance pour lancer un sort (2 points).")];
+          _spend(2);
+        } else {
+          if (ammoCount <= 0) return [MessageEvent('Plus de munitions (${itemById(w.ammo!).name}).')];
+          _removeOne(itemById(w.ammo!));
+        }
+        _rangedHit(w.atk + playerLevel ~/ 2, m, events, onHit: w.onHit, chance: w.onHitChance, crit: w.crit);
+      case ThrowAction(:final itemId, :final targetId):
+        final inv = _inv(itemId);
+        if (inv == null || inv.def.kind != ItemKind.throwable) return const [];
+        final d = inv.def;
+        final m = visibleMonster(targetId);
+        if (m == null || m.pos.chebyshev(player.pos) > d.range) {
+          return [const MessageEvent('Cible hors de portée ou hors de vue.')];
+        }
+        _removeOne(d);
+        events.add(MessageEvent('Vous lancez : ${d.name} !'));
+        if (d.aoe > 0) {
+          final center = m.pos;
+          for (final v in List<Actor>.of(monsters)) {
+            if (!v.alive || v.disguised || v.pos.chebyshev(center) > d.aoe) continue;
+            _rangedHit(d.atk + floor, v, events, onHit: d.onHit, chance: d.onHitChance, sure: true);
+          }
+          events.add(KamikazeEvent(-1, center, exploded: true));
+        } else {
+          _rangedHit(d.atk + floor ~/ 2, m, events, onHit: d.onHit, chance: d.onHitChance);
+        }
       case SkillAction():
         if (!skillReady) return [MessageEvent('${skill.name} : encore $skillCooldown tour(s) de recharge.')];
         final why = _useSkill(events);
@@ -434,8 +572,13 @@ class Game {
     }
 
     _monstersTurn(events);
+    _parrying = false;
     _tickStatuses(events);
     turn++;
+    if (!_spentStamina && stamina < maxStamina) {
+      stamina = (stamina + (action is WaitAction ? 2 : 1)).clamp(0, maxStamina);
+    }
+    _spentStamina = false;
     if (_fallPending && !gameOver) {
       _fallPending = false;
       _fall(events);
@@ -1025,13 +1168,15 @@ class Game {
 
   /// Ajoute au sac (empile les objets identiques). Faux si le sac est plein.
   bool _addToBag(ItemDef d) {
+    // Les munitions arrivent par paquets.
+    final n = d.kind == ItemKind.ammo ? d.stack : 1;
     final existing = _inv(d.id);
     if (existing != null) {
-      existing.count++;
+      existing.count += n;
       return true;
     }
     if (bagFull) return false;
-    inventory.add(InvItem(d));
+    inventory.add(InvItem(d, n));
     return true;
   }
 
@@ -1044,11 +1189,18 @@ class Game {
 
   void _equip(ItemDef d, List<GameEvent> events) {
     _removeOne(d);
-    final previous = d.kind == ItemKind.weapon ? weapon : trinket;
-    if (d.kind == ItemKind.weapon) {
-      weapon = d;
-    } else {
-      trinket = d;
+    final previous = switch (d.kind) {
+      ItemKind.weapon => weapon,
+      ItemKind.ranged => ranged,
+      _ => trinket,
+    };
+    switch (d.kind) {
+      case ItemKind.weapon:
+        weapon = d;
+      case ItemKind.ranged:
+        ranged = d;
+      default:
+        trinket = d;
     }
     if (previous != null && !_addToBag(previous)) {
       floorItems.add(FloorItem.item(previous, player.pos));
@@ -1152,6 +1304,10 @@ class Game {
           }
         }
         events.add(MessageEvent('PRRRRT ! Carton rouge pour $n monstre(s).', MessageKind.good));
+      case Effect.bagUp:
+        bagBonus += d.bagSlots;
+        events.add(MessageEvent('Vous vous équipez : ${d.name}. Le sac fait maintenant $maxSlots places.',
+            MessageKind.good));
       case Effect.rage:
         rageTurns = 12;
         events.add(const MessageEvent('RAAAAH ! Dégâts doublés pendant 12 tours.', MessageKind.good));
@@ -1251,7 +1407,7 @@ class Game {
   void _spawnMonsters() {
     _spawnBoss();
     final pool = _themePool();
-    final count = 3 + floor + rng.range(0, 2) + _nextExtraMonsters;
+    final count = 4 + (floor * 1.3).round() + rng.range(0, 2) + _nextExtraMonsters;
     _nextExtraMonsters = 0;
     for (var i = 0; i < count; i++) {
       final def = rng.weighted(pool, (d) => d.weight);
@@ -1269,15 +1425,15 @@ class Game {
       sprite: def.sprite,
       pos: pos,
       // Les monstres ordinaires se renforcent un peu à chaque étage (pas les boss, réglés à la main).
-      maxHp: (def.hp * (1 + 0.1 * depth) * (def.boss ? 1 : 1 + 0.04 * floor)).round(),
-      atk: def.atk + depth ~/ 3 + (def.boss ? 0 : floor ~/ 6),
+      maxHp: (def.hp * (1 + 0.1 * depth) * (def.boss ? 1 : 1 + 0.06 * floor)).round(),
+      atk: def.atk + depth ~/ 3 + (def.boss ? 0 : floor ~/ 3),
       def: def.def + depth ~/ 4,
       monster: def,
     );
   }
 
   void _spawnLoot() {
-    if (rng.chance(0.5)) _place(FloorItem.item(healPotion, const Pos(0, 0)));
+    if (rng.chance(0.35)) _place(FloorItem.item(healPotion, const Pos(0, 0)));
     final weights = [
       (70 - floor * 5).clamp(20, 70),
       25 + floor * 3,
@@ -1288,6 +1444,8 @@ class Game {
     for (var i = 0; i < nItems; i++) {
       _place(FloorItem.item(rollItem(rng, rollRarity(rng, weights), floor), const Pos(0, 0)));
     }
+    _place(FloorItem.item(stones, const Pos(0, 0)));
+    if (floor >= 2 && rng.chance(0.45)) _place(FloorItem.item(arrows, const Pos(0, 0)));
     final nGold = rng.range(2, 4);
     for (var i = 0; i < nGold; i++) {
       _place(FloorItem.gold(rng.range(3, 8) + floor * 2, const Pos(0, 0)));
@@ -1338,7 +1496,8 @@ class Game {
     events.add(const MessageEvent('Le coffre ouvre un œil. Puis une bouche. C\'est une MIMIQUE !', MessageKind.danger));
   }
 
-  void _attack(Actor attacker, Actor target, List<GameEvent> events, {double power = 1, bool ranged = false}) {
+  void _attack(Actor attacker, Actor target, List<GameEvent> events,
+      {double power = 1, bool ranged = false, bool sure = false}) {
     final byPlayer = attacker.isPlayer;
     final r = resolveAttack(
       attacker,
@@ -1346,6 +1505,7 @@ class Game {
       rng,
       critChance: byPlayer ? critChance : 0.10,
       multiplier: byPlayer && rageTurns > 0 ? 2 : 1,
+      sure: sure,
     );
     // Gêné : les coups font moitié moins mal.
     var damage = (r.damage * power).round();
@@ -1608,9 +1768,10 @@ class Game {
       if (_tacticalTurn(m, behavior, sees, events)) continue;
 
       if (m.pos.isAdjacent4(player.pos)) {
-        _attack(m, player, events);
+        _monsterMelee(m, events);
         continue;
       }
+      m.windup = false;
 
       final goal = m.lastSeenTarget;
       if (goal == null) {
@@ -1651,21 +1812,160 @@ class Game {
       case Behavior.coward:
         return m.hpRatio < 0.4 && _stepAway(m, events);
       case Behavior.ranged:
-        if (dist <= 1) return _stepAway(m, events);
+        if (m.reloading) {
+          // Après chaque tir, un tour pour recharger : c'est le moment de foncer.
+          m.reloading = false;
+          return true;
+        }
+        if (dist <= 1) return _retreat(m, events);
         if (sees && dist <= m.monster!.range) {
-          // Un tir fait un peu moins mal qu'un coup au contact.
-          _attack(m, player, events, ranged: true, power: 0.75);
+          // Un tir fait un peu moins mal qu'un coup au contact, et la garde le divise encore.
+          _attack(m, player, events, ranged: true, power: _parrying ? 0.35 : 0.75);
+          m.reloading = true;
           return true;
         }
         return false;
       case Behavior.healer:
         if (_tryHeal(m, events)) return true;
-        if (dist <= 1) return _stepAway(m, events);
+        if (dist <= 1) return _retreat(m, events);
         // Reste en retrait derrière ses alliés.
         return sees && dist <= 3;
       default:
         return false;
     }
+  }
+
+  /// Recul limité : pas deux tours de suite (sinon on ne peut jamais rattraper un tireur).
+  bool _retreat(Actor m, List<GameEvent> events) {
+    if (turn - m.lastRetreatTurn < 2) return false;
+    if (!_stepAway(m, events)) return false;
+    m.lastRetreatTurn = turn;
+    return true;
+  }
+
+  /// Corps à corps d'un monstre : coup lourd préparé, parade du joueur.
+  void _monsterMelee(Actor m, List<GameEvent> events) {
+    if (m.monster!.heavy && !m.windup) {
+      m.windup = true;
+      events.add(MessageEvent('${_cap(_the(m))} prépare un coup lourd ! Écartez-vous ou parez.', MessageKind.danger));
+      return;
+    }
+    final power = m.windup ? 2.5 : 1.0;
+    m.windup = false;
+    if (_parrying) {
+      events.add(AttackEvent(attackerId: m.id, targetId: player.id, from: m.pos, to: player.pos, damage: 0, miss: true));
+      events.add(MessageEvent('PARADE ! Vous bloquez ${_the(m)} et ripostez.', MessageKind.good));
+      show.addHype(power > 1 ? 6 : 3);
+      _attack(player, m, events, power: power > 1 ? 1.0 : 0.6, sure: true);
+      if (power > 1 && m.alive) _applyStatus(m, Status.stun, events);
+      return;
+    }
+    _attack(m, player, events, power: power);
+  }
+
+  /// Repousse [m] de 2 cases : choc contre un mur ou un autre monstre.
+  void _shove(Actor m, Dir dir, List<GameEvent> events) {
+    if (m.isBoss) {
+      events.add(MessageEvent('${_cap(_the(m))} ne bouge pas d\'un pouce. Inébranlable.'));
+      return;
+    }
+    final start = m.pos;
+    for (var i = 0; i < 2; i++) {
+      final next = m.pos + dir.delta;
+      final other = monsterAt(next);
+      if (other != null || !level.walkable(next) || chestAt(next) != null || featureAt(next) != null) {
+        final dmg = 3 + floor ~/ 2;
+        m.hp -= dmg;
+        events.add(StatusDamageEvent(m.id, m.pos, dmg, Status.stun.index));
+        if (other != null) {
+          other.hp -= dmg;
+          events.add(StatusDamageEvent(other.id, other.pos, dmg, Status.stun.index));
+          events.add(MessageEvent('${_cap(_the(m))} percute ${_the(other)} !', MessageKind.good));
+          if (!other.alive) _kill(other, player, events);
+        } else {
+          events.add(MessageEvent('${_cap(_the(m))} s\'écrase contre le décor !', MessageKind.good));
+        }
+        break;
+      }
+      m.pos = next;
+    }
+    // Repoussé = déséquilibré : il perd son prochain tour.
+    if (m.alive) _applyStatus(m, Status.stun, events);
+    if (m.pos != start) events.add(MoveEvent(m.id, start, m.pos));
+    m.windup = false;
+    show.addHype(3);
+    if (!m.alive && monsters.contains(m)) _kill(m, player, events);
+  }
+
+  /// Tir ou lancer du joueur sur [target].
+  void _rangedHit(int atk, Actor target, List<GameEvent> events,
+      {OnHit? onHit, double chance = 0, double crit = 0, bool sure = false}) {
+    final hit = sure || rng.chance(0.85);
+    var dmg = 0;
+    var isCrit = false;
+    if (hit) {
+      dmg = atk + rng.range(0, (atk / 2).ceil()) - target.def;
+      if (dmg < 1) dmg = 1;
+      isCrit = rng.chance(critChance + crit);
+      if (isCrit) dmg *= 2;
+      if (rageTurns > 0) dmg *= 2;
+      if (player.hasStatus(Status.embarrassed)) dmg = (dmg / 2).ceil();
+    }
+    events.add(AttackEvent(
+        attackerId: player.id,
+        targetId: target.id,
+        from: player.pos,
+        to: target.pos,
+        damage: dmg,
+        crit: isCrit,
+        miss: !hit,
+        ranged: true));
+    if (!hit) {
+      events.add(MessageEvent('Raté ! ${_cap(_the(target))} esquive.'));
+      return;
+    }
+    target.hp -= dmg;
+    if (isCrit) crits++;
+    events.add(MessageEvent('Touché : ${_the(target)} ($dmg).${isCrit ? ' CRITIQUE !' : ''}'));
+    if (!target.alive) {
+      _kill(target, player, events);
+      return;
+    }
+    if (onHit != null && rng.chance(chance)) {
+      if (onHit.status != null) _applyStatus(target, onHit.status!, events);
+    }
+  }
+
+  /// Intention affichée au-dessus d'un monstre (ce qu'il fera si le joueur ne bouge pas).
+  MonsterIntent intentOf(Actor m) {
+    if (!m.alive || m.disguised || !m.awake) return MonsterIntent.none;
+    if (m.hasStatus(Status.stun)) return MonsterIntent.sleep;
+    final def = m.monster!;
+    final dist = m.pos.chebyshev(player.pos);
+    final adjacent = m.pos.isAdjacent4(player.pos);
+    if (def.behavior == Behavior.slow && turn.isOdd) return MonsterIntent.sleep;
+    switch (def.behavior) {
+      case Behavior.kamikaze:
+        return m.primed || dist <= 1 ? MonsterIntent.explode : MonsterIntent.none;
+      case Behavior.ranged:
+        if (m.reloading) return MonsterIntent.reload;
+        if (dist <= 1) return turn - m.lastRetreatTurn >= 2 ? MonsterIntent.flee : MonsterIntent.melee;
+        return visible.contains(m.pos) && dist <= def.range ? MonsterIntent.shoot : MonsterIntent.none;
+      case Behavior.healer:
+        final wounded = monsters.any((a) => a.alive && a.hp < a.maxHp && a.pos.chebyshev(m.pos) <= 4);
+        if ((m.healTimer + 1) % 3 == 0 && wounded) return MonsterIntent.heal;
+        if (dist <= 1) return turn - m.lastRetreatTurn >= 2 ? MonsterIntent.flee : MonsterIntent.melee;
+        return MonsterIntent.none;
+      case Behavior.coward:
+        if (m.hpRatio < 0.4) return MonsterIntent.flee;
+      case Behavior.erratic:
+        return adjacent ? MonsterIntent.erratic : MonsterIntent.none;
+      default:
+        break;
+    }
+    if (!adjacent) return MonsterIntent.none;
+    if (m.windup) return MonsterIntent.heavy;
+    return def.heavy ? MonsterIntent.prepare : MonsterIntent.melee;
   }
 
   /// S'éloigne d'une case du joueur si possible.
@@ -1770,10 +2070,10 @@ class Game {
             MessageKind.good));
       case 'warmup':
         final before = player.hp;
-        player.hp = (player.hp + (player.maxHp * 0.25).round()).clamp(0, player.maxHp);
+        player.hp = (player.hp + (player.maxHp * 0.2).round()).clamp(0, player.maxHp);
         if (player.hp > before) events.add(HealEvent(player.pos, player.hp - before));
-        rageTurns = rageTurns < 5 ? 5 : rageTurns;
-        events.add(const MessageEvent('Dix pompes, trois jumping jacks : dégâts doublés 5 tours !', MessageKind.good));
+        rageTurns = rageTurns < 4 ? 4 : rageTurns;
+        events.add(const MessageEvent('Dix pompes, trois jumping jacks : dégâts doublés 4 tours !', MessageKind.good));
       case 'bribe':
         final cost = 15 + 3 * floor;
         Actor? target;
@@ -1886,7 +2186,7 @@ class Game {
 
   /// Version du format de sauvegarde. À incrémenter dès que le moteur change de façon
   /// à rendre un ancien journal impossible à rejouer à l'identique.
-  static const saveVersion = 3;
+  static const saveVersion = 4;
 
   static String _encode(PlayerAction a) => switch (a) {
         MoveAction(:final dir) => 'm${dir.index}',
@@ -1898,6 +2198,11 @@ class Game {
         UnequipAction(:final slot) => 'x:${slot.index}',
         DropAction(:final itemId) => 'r:$itemId',
         SkillAction() => 'k',
+        HeavyAction(:final dir) => 'L${dir.index}',
+        ShoveAction(:final dir) => 'P${dir.index}',
+        ParryAction() => 'y',
+        ShootAction(:final targetId) => 's:$targetId',
+        ThrowAction(:final itemId, :final targetId) => 'T:$itemId|$targetId',
       };
 
   Map<String, Object?> toSave() => {
@@ -1968,6 +2273,17 @@ class Game {
         chooseFeature(int.parse(arg));
       case 'k':
         act(const SkillAction());
+      case 'L':
+        act(HeavyAction(Dir.values[int.parse(c.substring(1))]));
+      case 'P':
+        act(ShoveAction(Dir.values[int.parse(c.substring(1))]));
+      case 'y':
+        act(const ParryAction());
+      case 's':
+        act(ShootAction(int.parse(arg)));
+      case 'T':
+        final parts = arg.split('|');
+        act(ThrowAction(parts[0], int.parse(parts[1])));
       case 'X':
         abandon();
       case 'G':

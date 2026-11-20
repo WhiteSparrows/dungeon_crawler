@@ -1,7 +1,9 @@
 import '../core/rng.dart';
 import 'status.dart';
 
-enum ItemKind { weapon, trinket, consumable }
+/// [ranged] : arme à distance (fronde, arc, baguette…), dans son propre emplacement.
+/// [ammo] : munitions (empilables). [throwable] : objet qu'on lance sur une cible.
+enum ItemKind { weapon, trinket, consumable, ranged, ammo, throwable }
 
 enum Rarity {
   commun('Commun', 0xFFD8D8E0),
@@ -36,6 +38,9 @@ enum Effect {
 
   /// Étourdit les monstres au contact.
   whistle,
+
+  /// Agrandit le sac pour le reste de la run.
+  bagUp,
 }
 
 class ItemDef {
@@ -57,7 +62,35 @@ class ItemDef {
     this.onHit,
     this.onHitChance = 0,
     this.immune,
+    this.range = 0,
+    this.ammo,
+    this.magic = false,
+    this.aoe = 0,
+    this.tint,
+    this.stack = 1,
+    this.bagSlots = 0,
   });
+
+  /// Places de sac gagnées (objets [Effect.bagUp]).
+  final int bagSlots;
+
+  /// Portée (armes à distance, objets à lancer).
+  final int range;
+
+  /// Munition consommée à chaque tir (id d'objet), null pour la magie.
+  final String? ammo;
+
+  /// Arme magique : chaque tir coûte de l'endurance au lieu de munitions.
+  final bool magic;
+
+  /// Rayon d'explosion (objets à lancer).
+  final int aoe;
+
+  /// Teinte du sprite (variantes de couleur).
+  final int? tint;
+
+  /// Quantité trouvée d'un coup (munitions).
+  final int stack;
 
   final String id;
   final String name;
@@ -87,12 +120,15 @@ class ItemDef {
   /// Accessoire : immunité à une altération.
   final Status? immune;
 
-  bool get equippable => kind != ItemKind.consumable;
+  bool get equippable => kind == ItemKind.weapon || kind == ItemKind.trinket || kind == ItemKind.ranged;
 
   /// Résumé des bonus, ex. « ATQ +3 · CRIT +10% ».
   String get statLine {
     final parts = <String>[
-      if (atk != 0) 'ATQ ${atk > 0 ? '+' : ''}$atk',
+      if (kind == ItemKind.ranged || kind == ItemKind.throwable) 'DEGATS $atk · PORTEE $range',
+      if (kind == ItemKind.ranged && magic) 'MAGIE : 2 ENDURANCE',
+      if (aoe > 0) 'EXPLOSION',
+      if (atk != 0 && kind != ItemKind.ranged && kind != ItemKind.throwable) 'ATQ ${atk > 0 ? '+' : ''}$atk',
       if (def != 0) 'DEF ${def > 0 ? '+' : ''}$def',
       if (maxHp != 0) 'PV ${maxHp > 0 ? '+' : ''}$maxHp',
       if (crit != 0) 'CRIT +${(crit * 100).round()}%',
@@ -268,6 +304,208 @@ const weapons = <ItemDef>[
       minFloor: 11),
 ];
 
+// ------------------------------------------------------------------ Armes à distance et magie
+
+const rangedWeapons = <ItemDef>[
+  ItemDef(
+      id: 'slingshot',
+      name: 'Lance-pierre de récré',
+      desc: 'Confisqué en 1998. Toujours aussi efficace sur les rats.',
+      sprite: 56,
+      kind: ItemKind.ranged,
+      atk: 3,
+      range: 4,
+      ammo: 'stones'),
+  ItemDef(
+      id: 'bow',
+      name: 'Arc de kermesse',
+      desc: 'Gagné au chamboule-tout. Les flèches ont une ventouse, mais on a limé les ventouses.',
+      sprite: 131,
+      tint: 0xFFC08040,
+      kind: ItemKind.ranged,
+      rarity: Rarity.rare,
+      atk: 5,
+      range: 5,
+      ammo: 'arrows',
+      minFloor: 2),
+  ItemDef(
+      id: 'confetti_cannon',
+      name: 'Canon à confettis',
+      desc: 'Fait peu de dégâts, mais beaucoup de honte.',
+      sprite: 82,
+      tint: 0xFFFF90D0,
+      kind: ItemKind.ranged,
+      rarity: Rarity.rare,
+      atk: 3,
+      range: 3,
+      ammo: 'stones',
+      onHit: OnHit.embarrass,
+      onHitChance: 0.5,
+      minFloor: 3),
+  ItemDef(
+      id: 'crossbow',
+      name: 'Arbalète de vigile',
+      desc: 'Homologuée pour la sécurité des galeries marchandes. Par personne.',
+      sprite: 131,
+      tint: 0xFF9090A0,
+      kind: ItemKind.ranged,
+      rarity: Rarity.epique,
+      atk: 8,
+      range: 5,
+      ammo: 'arrows',
+      onHit: OnHit.stun,
+      onHitChance: 0.15,
+      minFloor: 5),
+  ItemDef(
+      id: 'nailgun',
+      name: 'Cloueuse de chantier',
+      desc: 'Le chef de chantier la cherche. Il cherche aussi ses doigts.',
+      sprite: 74,
+      tint: 0xFFFFD84D,
+      kind: ItemKind.ranged,
+      rarity: Rarity.legendaire,
+      atk: 11,
+      range: 4,
+      ammo: 'stones',
+      crit: 0.1,
+      minFloor: 8),
+  ItemDef(
+      id: 'wand_fire',
+      name: 'Baguette du magicien de goûter',
+      desc: "Sortait des lapins. Sort maintenant des boules de feu. Le magicien n'a pas survécu à la transition.",
+      sprite: 129,
+      kind: ItemKind.ranged,
+      rarity: Rarity.rare,
+      atk: 4,
+      range: 4,
+      magic: true,
+      onHit: OnHit.burn,
+      onHitChance: 0.4,
+      minFloor: 2),
+  ItemDef(
+      id: 'wand_frost',
+      name: 'Sceptre de climatisation',
+      desc: 'Réglé sur « bureau en août ». Gèle sur place.',
+      sprite: 130,
+      tint: 0xFFA0E0FF,
+      kind: ItemKind.ranged,
+      rarity: Rarity.rare,
+      atk: 4,
+      range: 4,
+      magic: true,
+      onHit: OnHit.stun,
+      onHitChance: 0.3,
+      minFloor: 3),
+  ItemDef(
+      id: 'wand_lightning',
+      name: 'Télécommande foudroyante',
+      desc: 'Change de chaîne. Et de vie.',
+      sprite: 74,
+      tint: 0xFF5EC8FF,
+      kind: ItemKind.ranged,
+      rarity: Rarity.epique,
+      atk: 9,
+      range: 6,
+      magic: true,
+      minFloor: 5),
+  ItemDef(
+      id: 'grimoire',
+      name: 'Grimoire des impôts',
+      desc: 'Chaque page est une malédiction. Certaines en trois exemplaires.',
+      sprite: 75,
+      tint: 0xFFC77DFF,
+      kind: ItemKind.ranged,
+      rarity: Rarity.legendaire,
+      atk: 12,
+      range: 5,
+      magic: true,
+      onHit: OnHit.poison,
+      onHitChance: 0.4,
+      minFloor: 8),
+];
+
+// ------------------------------------------------------------------ Munitions et objets à lancer
+
+const stones = ItemDef(
+  id: 'stones',
+  name: 'Cailloux',
+  desc: 'Munitions pour lance-pierre, canon à confettis et cloueuse.',
+  sprite: 102,
+  tint: 0xFF9A9A9A,
+  kind: ItemKind.ammo,
+  stack: 8,
+);
+
+const arrows = ItemDef(
+  id: 'arrows',
+  name: 'Flèches',
+  desc: 'Munitions pour arcs et arbalètes. Ventouses limées.',
+  sprite: 103,
+  tint: 0xFFC0A060,
+  kind: ItemKind.ammo,
+  stack: 5,
+  minFloor: 2,
+);
+
+const throwables = <ItemDef>[
+  ItemDef(
+      id: 'throw_knife',
+      name: 'Couteau de lancer',
+      desc: 'Un couteau. Que vous lancez. Le concept est simple.',
+      sprite: 103,
+      kind: ItemKind.throwable,
+      atk: 7,
+      range: 4),
+  ItemDef(
+      id: 'brick',
+      name: 'Brique',
+      desc: "Matériau de construction et argument définitif. Étourdit souvent.",
+      sprite: 74,
+      tint: 0xFFB06040,
+      kind: ItemKind.throwable,
+      atk: 5,
+      range: 3,
+      onHit: OnHit.stun,
+      onHitChance: 0.5),
+  ItemDef(
+      id: 'pickle_jar',
+      name: 'Bocal de cornichons',
+      desc: 'Explose en une pluie de saumure humiliante. Gêne à coup sûr.',
+      sprite: 113,
+      tint: 0xFF90E060,
+      kind: ItemKind.throwable,
+      atk: 2,
+      range: 4,
+      onHit: OnHit.embarrass,
+      onHitChance: 1),
+  ItemDef(
+      id: 'bomb',
+      name: 'Bombe artisanale',
+      desc: 'Un réveil, de la poudre et beaucoup de scotch. Explose autour de la cible.',
+      sprite: 82,
+      tint: 0xFF606060,
+      kind: ItemKind.throwable,
+      rarity: Rarity.rare,
+      atk: 12,
+      range: 4,
+      aoe: 1,
+      minFloor: 2),
+  ItemDef(
+      id: 'hot_sauce',
+      name: 'Sauce piquante explosive',
+      desc: "Interdite dans les cantines depuis l'incident. Enflamme tout autour de la cible.",
+      sprite: 114,
+      tint: 0xFFFF4040,
+      kind: ItemKind.throwable,
+      rarity: Rarity.rare,
+      atk: 6,
+      range: 4,
+      aoe: 1,
+      onHit: OnHit.burn,
+      onHitChance: 1,
+      minFloor: 3),
+];
+
 // ------------------------------------------------------------------ Accessoires
 
 const trinkets = <ItemDef>[
@@ -417,6 +655,30 @@ const whistle = ItemDef(
   effect: Effect.whistle,
 );
 
+const touristPouch = ItemDef(
+  id: 'tourist_pouch',
+  name: 'Banane de touriste',
+  desc: "À porter à la taille, avec fierté et sans goût. +3 places dans le sac pour toute la run.",
+  sprite: 66,
+  tint: 0xFFFFD84D,
+  kind: ItemKind.consumable,
+  effect: Effect.bagUp,
+  bagSlots: 3,
+);
+
+const hikingBag = ItemDef(
+  id: 'hiking_bag',
+  name: 'Sac de randonnée',
+  desc: "Quarante litres, douze poches, une odeur de chaussette. +6 places dans le sac pour toute la run.",
+  sprite: 66,
+  tint: 0xFF8BE58B,
+  kind: ItemKind.consumable,
+  rarity: Rarity.rare,
+  effect: Effect.bagUp,
+  bagSlots: 6,
+  minFloor: 3,
+);
+
 /// Fioles mystère : leur nom réel n'apparaît qu'une fois identifiées.
 const mysteryPotions = <ItemDef>[
   ItemDef(
@@ -493,12 +755,18 @@ const potionLooks = <(String, int)>[
 
 const allItems = <ItemDef>[
   ...weapons,
+  ...rangedWeapons,
+  stones,
+  arrows,
+  ...throwables,
   ...trinkets,
   healPotion,
   bandage,
   confettiBarrel,
   remote,
   whistle,
+  touristPouch,
+  hikingBag,
   ...mysteryPotions,
 ];
 

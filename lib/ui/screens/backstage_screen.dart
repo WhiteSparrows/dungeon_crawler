@@ -303,7 +303,7 @@ class _BackstageScreenState extends State<BackstageScreen> {
                     : ('${b.healPrice} OR', g.gold >= b.healPrice ? () => widget.c.heal() : null),
               ),
               const SizedBox(height: 14),
-              _section('BOUTIQUE', 'Sac ${g.inventory.length}/${Game.maxSlots}'),
+              _section('BOUTIQUE', 'Sac ${g.inventory.length}/${g.maxSlots}'),
               for (var i = 0; i < b.shop.length; i++) _offer(b.shop[i], i),
             ],
           ),
@@ -341,7 +341,7 @@ class _BackstageScreenState extends State<BackstageScreen> {
   Widget _offer(ShopOffer o, int i) {
     final canBuy = !o.sold && g.gold >= o.price;
     return _card(
-      icon: SpriteIcon(widget.atlas, g.spriteOf(o.item), size: 36),
+      icon: SpriteIcon(widget.atlas, g.spriteOf(o.item), size: 36, tint: g.tintOf(o.item)),
       title: g.nameOf(o.item),
       subtitle: [o.item.statLine, g.descOf(o.item)].where((s) => s.isNotEmpty).join('\n'),
       color: Color(o.item.rarity.color),

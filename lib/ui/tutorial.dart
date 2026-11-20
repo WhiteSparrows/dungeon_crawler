@@ -18,6 +18,10 @@ String? nextInGameTip(Game g, Set<String> seen) {
     'move': () => true,
     'boss': () => g.bossAnnounced && g.bossAlive,
     'monster': () => g.monsters.any((m) => !m.disguised && shown(m.pos)),
+    'ranged': () => g.monsters.any((m) => !m.disguised && shown(m.pos) && g.intentOf(m) == MonsterIntent.shoot),
+    'combat': () => g.monsters.any((m) => !m.disguised && m.pos.isAdjacent4(me)),
+    'intent': () => g.monsters.any((m) => shown(m.pos) &&
+        const {MonsterIntent.prepare, MonsterIntent.heavy, MonsterIntent.explode}.contains(g.intentOf(m))),
     'skill': () => g.skillReady && g.monsters.any((m) => !m.disguised && m.pos.isAdjacent4(me)),
     'status': () => g.player.statuses.isNotEmpty,
     'potion': () => g.player.hpRatio < 0.5 && g.healPotions > 0,

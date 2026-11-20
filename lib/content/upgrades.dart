@@ -20,6 +20,7 @@ const upgradeDefs = <UpgradeDef>[
   UpgradeDef('bonus', 'Prime de signature', '+25 or au départ par niveau.', [30, 60, 90]),
   UpgradeDef('airtime', 'Temps d\'antenne', '+15 tours avant démolition, à chaque étage, par niveau.', [60, 120]),
   UpgradeDef('welcome', 'Cadeau de bienvenue', 'Loot box au départ : Bronze, puis Argent.', [70, 150]),
+  UpgradeDef('pockets', 'Poches cousues main', '+2 places dans le sac par niveau.', [40, 80, 130]),
 ];
 
 UpgradeDef upgradeById(String id) => upgradeDefs.firstWhere((u) => u.id == id);

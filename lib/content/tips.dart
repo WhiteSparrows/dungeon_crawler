@@ -24,6 +24,19 @@ const tipDefs = <TipDef>[
       "Les monstres jouent quand vous jouez : un pas pour vous, un pas pour eux. Frappez-les au contact. Les "
           "petits carrés de couleur au-dessus d'eux sont des altérations (poison, feu, étourdi, gêné). Ceux qui "
           "tirent de loin, explosent ou soignent sont à traiter en priorité."),
+  TipDef('combat', 'Choisir ses coups',
+      "Toucher un monstre au contact donne un coup RAPIDE (gratuit). La barre de combat propose mieux : "
+          "LOURD (2 d'endurance, gros dégâts, peut étourdir), POUSSER (1, l'envoie valser deux cases plus loin, "
+          "déséquilibré, et encore plus mal s'il percute un mur), PARER (2, bloque le prochain coup au contact et "
+          "riposte). Choisissez le coup, puis touchez le monstre. L'endurance remonte toute seule, plus vite en attendant."),
+  TipDef('intent', 'Lire les intentions',
+      "La petite étiquette au-dessus d'un monstre dit ce qu'il fera si vous ne bougez pas : « ! » il frappe, "
+          "« ... » orange il prépare un coup LOURD, « !! » rouge il l'abat (écartez-vous ou PAREZ), « > » il tire, "
+          "« ... » gris il recharge (foncez !), « ** » il va exploser, « + » il soigne, « z » il est sonné."),
+  TipDef('ranged', 'Tirer de loin',
+      "Un tireur ! Touchez TIRER, puis touchez la cible encadrée de jaune. Votre lance-pierre utilise des cailloux "
+          "(il y en a dans chaque étage) ; les baguettes magiques coûtent 2 d'endurance. Après chaque tir, les tireurs "
+          "ennemis rechargent un tour : c'est le moment de foncer sur eux."),
   TipDef('skill', 'Votre POUVOIR',
       "Le bouton POUVOIR déclenche la compétence de votre rôle. Elle se recharge en quelques tours. "
           "Appui long sur le bouton pour lire ce qu'elle fait. N'hésitez pas, le public adore les numéros."),

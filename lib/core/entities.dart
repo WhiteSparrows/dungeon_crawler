@@ -57,6 +57,15 @@ class Actor {
   /// Compteur de soins (soigneurs).
   int healTimer = 0;
 
+  /// Coup lourd en préparation (frappe double au tour suivant si le joueur reste au contact).
+  bool windup = false;
+
+  /// Tireur en train de recharger après un tir.
+  bool reloading = false;
+
+  /// Dernier tour où ce monstre a reculé (un tireur ne recule pas deux tours de suite).
+  int lastRetreatTurn = -10;
+
   bool hasStatus(Status s) => statuses.containsKey(s);
   bool get isBoss => monster?.boss ?? false;
 

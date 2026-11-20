@@ -169,6 +169,10 @@ void main() {
         ..lastSeenTarget = g.player.pos;
       g.player.hp = g.player.maxHp = 9999;
       for (var i = 0; i < 12; i++) {
+        // Le boss doit garder le joueur en vue (sinon il se rendort et n'appelle personne).
+        b
+          ..awake = true
+          ..lastSeenTarget = g.player.pos;
         g.act(const WaitAction());
       }
       expect(g.monsters.where((m) => !m.isBoss).length, greaterThan(0));
@@ -184,6 +188,7 @@ void main() {
       final d = _freeDir(g);
       b.pos = g.player.pos + d.delta;
       b.hp = 1;
+      g.player.hp = g.player.maxHp = 9999;
       final events = <GameEvent>[];
       for (var i = 0; i < 30 && b.alive; i++) {
         events.addAll(g.act(MoveAction(d)));
