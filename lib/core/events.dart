@@ -56,6 +56,14 @@ class PickupEvent extends GameEvent {
   final String label;
 }
 
+/// Une compétence monte d'un niveau ([mastery] = index de `Mastery`).
+class MasteryUpEvent extends GameEvent {
+  const MasteryUpEvent(this.mastery, this.level, this.label);
+  final int mastery;
+  final int level;
+  final String label;
+}
+
 class LevelUpEvent extends GameEvent {
   const LevelUpEvent(this.level);
   final int level;

@@ -102,6 +102,12 @@ const achievementDefs = <AchievementDef>[
       "Il a gonflé, il a explosé, et vous étiez déjà ailleurs. Le kamikaze est mort pour rien. "
           "Comme tous les kamikazes, me direz-vous. Mais lui, en plus, c'était un rat.",
       secret: true),
+  AchievementDef('specialist', 'Spécialiste autoproclamé', 'Monter une compétence au niveau 6.', BoxTier.argent,
+      "Niveau 6 dans une compétence ! Vous êtes officiellement un expert. Notre service juridique précise que "
+          "« expert » n'engage à rien et ne protège pas des monstres."),
+  AchievementDef('jack_of_all', 'Couteau suisse', 'Toutes les compétences au niveau 2.', BoxTier.argent,
+      "Un peu de tout, beaucoup de rien ! Le public adore les profils polyvalents. Les monstres aussi : "
+          "il y a plus de saveurs."),
   AchievementDef('crafter', 'Bricoleur du dimanche', "Fabriquer 5 choses à l'atelier.", BoxTier.bronze,
       "Cinq créations faites main ! Notre émission de déco a appelé, elle veut vous voir. Vous n'irez pas, "
           "vous serez mort, mais c'est gentil de leur part."),

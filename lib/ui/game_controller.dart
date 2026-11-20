@@ -234,7 +234,7 @@ class GameController extends ChangeNotifier {
   int get targetRange {
     final t = targeting;
     if (t == null) return 0;
-    return t.isThrow ? t.range : (game.ranged?.range ?? 0);
+    return t.isThrow ? t.range : game.shootRange;
   }
 
   /// Monstres qu'on peut viser maintenant.
@@ -278,6 +278,7 @@ class GameController extends ChangeNotifier {
     final ok = game.dismantle(itemId);
     if (ok) {
       GameAudio.instance.play(Sfx.click);
+      _ingest(List.of(game.freeEvents));
       notifyListeners();
     }
     return ok;
@@ -429,7 +430,7 @@ class GameController extends ChangeNotifier {
   }
 
   bool canTargetAfterReset(Actor m, Targeting t) {
-    final range = t.isThrow ? t.range : (game.ranged?.range ?? 0);
+    final range = t.isThrow ? t.range : game.shootRange;
     return m.alive && !m.disguised && game.visible.contains(m.pos) && m.pos.chebyshev(game.player.pos) <= range;
   }
 
@@ -506,6 +507,10 @@ class GameController extends ChangeNotifier {
           _buzz(dead ? HapticFeedback.heavyImpact : HapticFeedback.selectionClick);
         case FloorEvent():
           _fadeStartMs = nowMs;
+        case MasteryUpEvent(:final level, :final label):
+          final p = game.player.pos;
+          floaters.add(Floater('${label.toUpperCase()} $level', p.x.toDouble(), p.y.toDouble() - 0.8,
+              const Color(0xFF9AD8FF), nowMs));
         case LevelUpEvent():
           _levelUpMs = nowMs;
           _buzz(HapticFeedback.mediumImpact);
@@ -607,6 +612,8 @@ class GameController extends ChangeNotifier {
           fx.heal(pos.x.toDouble(), pos.y.toDouble(), now);
         case LevelUpEvent():
           fx.levelUp(px, py, now);
+        case MasteryUpEvent():
+          fx.sparkle(px, py, now);
         case BoxGainedEvent() || AchievementEvent() || SponsorGiftEvent():
           fx.confetti(px, py, now);
         case BossEvent(:final defeated):
@@ -656,6 +663,8 @@ class GameController extends ChangeNotifier {
           p(Sfx.potion);
         case LevelUpEvent():
           p(Sfx.levelup);
+        case MasteryUpEvent():
+          p(Sfx.pickup);
         case AchievementEvent():
           p(Sfx.achievement);
         case BoxGainedEvent() || SponsorGiftEvent():

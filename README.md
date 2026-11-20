@@ -83,6 +83,20 @@ couper les conseils ou les revoir depuis le début.
 - **Améliorations** jusqu'à +5 (coût croissant) : affûter l'arme (ATQ +1), renforcer l'accessoire
   (DEF +1), calibrer l'arme à distance (dégâts +1).
 
+## Compétences qui progressent
+
+Six branches gagnent de l'expérience à l'usage, le temps d'une run (niveau 10 maximum), visibles dans le
+SAC, onglet STATS. Chaque montée est annoncée à l'écran et commentée par MAESTRO.
+
+| Branche | Progresse en… | Bonus | Paliers |
+|---|---|---|---|
+| Bagarre | frappant au contact (x2 à mains nues) | dégâts +1 / 3 niv. | 3 : poings +2 · 5 : coup lourd à 1 · 8 : étourdit 1 fois sur 2 |
+| Tir | tirant, lançant | dégâts +1 / 3 niv. | 3 : portée +1 · 6 : 1 munition sur 3 récupérée |
+| Magie | lançant des sorts | dégâts +1 / 3 niv. | 4 : sorts à 1 endurance · 7 : portée +1 |
+| Garde | parant, repoussant | DEF +1 / 4 niv. | 3 : parade à 1 · 6 : riposte renforcée |
+| Bricolage | démontant, fabriquant | +8 % de composant bonus / niv. | 4 : améliorations -25 % · 7 : recettes moins chères |
+| Charisme | utilisant son pouvoir | recharge -4 % / niv. | 5 : +audience à chaque pouvoir |
+
 ## Compétences et monstres tactiques
 
 - **Bouton POUVOIR** : chaque rôle a une compétence avec temps de recharge (appui long = description).

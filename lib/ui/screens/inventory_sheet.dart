@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../content/crafting.dart';
 import '../../content/items.dart';
+import '../../content/mastery.dart';
 import '../../core/game.dart';
 import '../game_controller.dart';
 import '../render/sprite_atlas.dart';
@@ -39,6 +40,9 @@ class _InventorySheetState extends State<InventorySheet> {
   /// Onglet atelier (sinon : le sac).
   bool _workshop = false;
 
+  /// Onglet des compétences.
+  bool _stats = false;
+
   /// Dernier message de l'atelier (fabrication refusée, démontage…).
   String? _note;
 
@@ -69,14 +73,26 @@ class _InventorySheetState extends State<InventorySheet> {
                     children: [
                       _tab(
                         'SAC',
-                        !_workshop,
-                        () => setState(() => _workshop = false),
+                        !_workshop && !_stats,
+                        () => setState(() => _workshop = _stats = false),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       _tab(
                         'ATELIER',
                         _workshop,
-                        () => setState(() => _workshop = true),
+                        () => setState(() {
+                          _workshop = true;
+                          _stats = false;
+                        }),
+                      ),
+                      const SizedBox(width: 6),
+                      _tab(
+                        'STATS',
+                        _stats,
+                        () => setState(() {
+                          _stats = true;
+                          _workshop = false;
+                        }),
                       ),
                       const Spacer(),
                       Text(
@@ -85,7 +101,9 @@ class _InventorySheetState extends State<InventorySheet> {
                       ),
                     ],
                   ),
-                  if (_workshop)
+                  if (_stats)
+                    ..._statsView()
+                  else if (_workshop)
                     ..._workshopView()
                   else ...[
                     const SizedBox(height: 14),
@@ -178,6 +196,84 @@ class _InventorySheetState extends State<InventorySheet> {
       y.entries.map((e) => '${e.key.label} x${e.value}').join(', ');
 
   // ---------------------------------------------------------------- atelier
+
+  // ------------------------------------------------------------ compétences
+
+  List<Widget> _statsView() {
+    return [
+      const SizedBox(height: 12),
+      Text('COMPETENCES', style: pixel(8, color: Palette.muted)),
+      const SizedBox(height: 4),
+      const Text(
+        "Elles progressent quand vous vous en servez, le temps d'une run.",
+        style: TextStyle(color: Palette.muted, fontSize: 11),
+      ),
+      const SizedBox(height: 8),
+      for (final m in Mastery.values) _mastery(m),
+    ];
+  }
+
+  Widget _mastery(Mastery m) {
+    final lvl = g.masteryLevel(m);
+    final xp = g.masteryXpOf(m);
+    final maxed = lvl >= masteryMax;
+    final lo = masteryThresholds[lvl];
+    final hi = maxed ? lo : masteryThresholds[lvl + 1];
+    final ratio = maxed ? 1.0 : (xp - lo) / (hi - lo);
+    final perks = masteryPerks.where((p) => p.mastery == m).toList();
+    final color = Color(m.tint);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1424),
+        border: Border.all(color: lvl > 0 ? color.withValues(alpha: 0.6) : Palette.panelBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SpriteIcon(widget.atlas, m.sprite, size: 32),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(m.label, style: const TextStyle(color: Palette.text, fontSize: 14, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    Text(maxed ? 'MAX' : 'NIV $lvl', style: pixel(8, color: color)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  child: SizedBox(
+                    height: 6,
+                    child: LinearProgressIndicator(
+                      value: ratio.clamp(0.0, 1.0),
+                      backgroundColor: const Color(0xFF2E2540),
+                      valueColor: AlwaysStoppedAnimation(color),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  maxed ? masteryBonusText(m, lvl) : '${masteryBonusText(m, lvl)}  ·  $xp/$hi XP',
+                  style: const TextStyle(color: Palette.text, fontSize: 11),
+                ),
+                Text(m.howTo, style: const TextStyle(color: Palette.muted, fontSize: 11)),
+                for (final p in perks)
+                  Text(
+                    '${lvl >= p.level ? '✓' : 'Niv ${p.level}'} : ${p.text}',
+                    style: TextStyle(fontSize: 11, color: lvl >= p.level ? const Color(0xFF8BE58B) : Palette.muted),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   List<Widget> _workshopView() {
     return [
@@ -441,7 +537,7 @@ class _InventorySheetState extends State<InventorySheet> {
       else if (d.kind == ItemKind.throwable)
         _btn('LANCER', () {
           Navigator.of(context).pop();
-          widget.c.startThrow(d.id, d.range);
+          widget.c.startThrow(d.id, g.throwRange(d));
         }, primary: true)
       else if (d.kind == ItemKind.consumable)
         _btn(

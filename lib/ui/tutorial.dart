@@ -29,6 +29,7 @@ String? nextInGameTip(Game g, Set<String> seen) {
     'mod': () => g.floorMod != null,
     'lootbox': () => g.pendingBoxes.isNotEmpty,
     'craft': () => g.materials.values.any((n) => n > 0),
+    'mastery': () => g.masteryXp.values.any((n) => n >= 4),
     'bag': () => g.inventory.any((i) => i.def.equippable),
     'chest': () => g.chests.any((c) => shown(c.pos)) || g.monsters.any((m) => m.disguised && shown(m.pos)),
     'feature': () => g.features.any((f) => !f.used && shown(f.pos)),

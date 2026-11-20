@@ -47,6 +47,10 @@ const tipDefs = <TipDef>[
   TipDef('bag', 'Un objet à équiper',
       "Ouvrez le SAC : touchez un objet pour voir ses effets et le comparer à ce que vous portez, puis "
           "ÉQUIPER. Une arme et un accessoire à la fois. Équiper, boire ou jeter prend un tour."),
+  TipDef('mastery', 'Vos compétences progressent',
+      "Chaque geste vous entraîne : frapper fait monter la Bagarre (deux fois plus vite à mains nues), tirer le "
+          "Tir, les sorts la Magie, parer et pousser la Garde, l'atelier le Bricolage, le pouvoir le Charisme. "
+          "Chaque niveau donne un bonus, certains débloquent un palier. Tout est dans le SAC, onglet STATS."),
   TipDef('craft', "L'atelier",
       "Vous avez récupéré des composants (ferraille, os, gelée…). Ils vont dans votre bourse, sans prendre de "
           "place. Dans le SAC : touchez un objet inutile puis DÉMONTER pour en tirer des composants, et ouvrez "

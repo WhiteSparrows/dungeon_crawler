@@ -27,6 +27,7 @@ String signature(Game g) => [
       g.stamina,
       [for (final e in g.materials.entries) '${e.key.name}${e.value}'].join(','),
       [for (final e in g.itemUpgrades.entries) '${e.key}${e.value}'].join(','),
+      [for (final e in g.masteryXp.entries) '${e.key.name}${e.value}'].join(','),
       g.ranged?.id,
       g.trinket?.id,
       [for (final i in g.inventory) '${i.def.id}x${i.count}'].join(','),

@@ -1,6 +1,7 @@
 import '../content/achievements.dart';
 import '../content/crafting.dart';
 import '../content/features.dart';
+import '../content/mastery.dart';
 import '../content/interviews.dart';
 import '../content/items.dart';
 import '../content/lines_fr.dart';
@@ -248,6 +249,31 @@ class Game {
   /// Boss de l'étage (étages 3, 6, 9, 12, 15).
   Actor? boss;
   bool _bossAnnounced = false;
+
+  // Compétences qui progressent à l'usage
+  final masteryXp = <Mastery, int>{};
+  int masteryXpOf(Mastery m) => masteryXp[m] ?? 0;
+  int masteryLevel(Mastery m) => masteryLevelFor(masteryXpOf(m));
+  bool hasPerk(Mastery m, int level) => masteryLevel(m) >= level;
+
+  /// Événements produits hors tour (démontage) : l'interface les récupère.
+  final freeEvents = <GameEvent>[];
+
+  int get heavyCost => hasPerk(Mastery.brawl, 5) ? 1 : 2;
+  int get parryCost => hasPerk(Mastery.guard, 3) ? 1 : 2;
+  int get spellCost => hasPerk(Mastery.magic, 4) ? 1 : 2;
+
+  /// Portée de l'arme à distance équipée (avec les paliers de compétence).
+  int get shootRange {
+    final w = ranged;
+    if (w == null) return 0;
+    return w.range + (w.magic ? (hasPerk(Mastery.magic, 7) ? 1 : 0) : (hasPerk(Mastery.shooting, 3) ? 1 : 0));
+  }
+
+  int throwRange(ItemDef d) => d.range + (hasPerk(Mastery.shooting, 3) ? 1 : 0);
+
+  /// Recharge réelle du pouvoir (le charisme la raccourcit).
+  int get skillCooldownMax => (skill.cooldown * (1 - 0.04 * masteryLevel(Mastery.charisma))).round();
 
   // Artisanat
   /// Bourse de composants (ne prend pas de place dans le sac).
@@ -526,38 +552,49 @@ class Game {
       case HeavyAction(:final dir):
         final m = monsterAt(player.pos + dir.delta);
         if (m == null || m.disguised) return [const MessageEvent('Rien à frapper par là.')];
-        if (stamina < 2) return [const MessageEvent("Pas assez d'endurance pour un coup lourd (2 points).")];
-        _spend(2);
+        if (stamina < heavyCost) {
+          return [MessageEvent("Pas assez d'endurance pour un coup lourd ($heavyCost point(s)).")];
+        }
+        _spend(heavyCost);
         events.add(const MessageEvent('COUP LOURD !', MessageKind.good));
         _attack(player, m, events, power: 1.6);
-        if (m.alive && rng.chance(0.2)) _applyStatus(m, Status.stun, events);
+        if (m.alive && rng.chance(hasPerk(Mastery.brawl, 8) ? 0.5 : 0.2)) _applyStatus(m, Status.stun, events);
       case ShoveAction(:final dir):
         final m = monsterAt(player.pos + dir.delta);
         if (m == null || m.disguised) return [const MessageEvent('Personne à repousser par là.')];
         if (stamina < 1) return [const MessageEvent("Pas assez d'endurance pour repousser (1 point).")];
         _spend(1);
         _shove(m, dir, events);
+        _train(Mastery.guard, 1, events);
       case ParryAction():
-        if (stamina < 2) return [const MessageEvent("Pas assez d'endurance pour parer (2 points).")];
-        _spend(2);
+        if (stamina < parryCost) return [MessageEvent("Pas assez d'endurance pour parer ($parryCost point(s)).")];
+        _spend(parryCost);
         _parrying = true;
         events.add(const MessageEvent('Vous vous mettez en garde.', MessageKind.good));
       case ShootAction(:final targetId):
         final w = ranged;
         if (w == null) return [const MessageEvent('Aucune arme à distance équipée.')];
         final m = visibleMonster(targetId);
-        if (m == null || m.pos.chebyshev(player.pos) > w.range) {
+        if (m == null || m.pos.chebyshev(player.pos) > shootRange) {
           return [const MessageEvent('Cible hors de portée ou hors de vue.')];
         }
+        final track = w.magic ? Mastery.magic : Mastery.shooting;
         if (w.magic) {
-          if (stamina < 2) return [const MessageEvent("Pas assez d'endurance pour lancer un sort (2 points).")];
-          _spend(2);
+          if (stamina < spellCost) {
+            return [MessageEvent("Pas assez d'endurance pour lancer un sort ($spellCost point(s)).")];
+          }
+          _spend(spellCost);
         } else {
           if (ammoCount <= 0) return [MessageEvent('Plus de munitions (${itemById(w.ammo!).name}).')];
-          _removeOne(itemById(w.ammo!));
+          if (hasPerk(Mastery.shooting, 6) && rng.chance(1 / 3)) {
+            events.add(PickupEvent(player.pos, 'munition récupérée'));
+          } else {
+            _removeOne(itemById(w.ammo!));
+          }
         }
-        _rangedHit(w.atk + plusOf(w) + playerLevel ~/ 2, m, events,
+        _rangedHit(w.atk + plusOf(w) + playerLevel ~/ 2 + masteryLevel(track) ~/ 3, m, events,
             onHit: w.onHit, chance: w.onHitChance, crit: w.crit);
+        _train(track, 1, events);
       case CraftAction(:final recipeId):
         final r = recipeById(recipeId);
         final why = whyNotCraft(r);
@@ -568,27 +605,31 @@ class Game {
         if (inv == null || inv.def.kind != ItemKind.throwable) return const [];
         final d = inv.def;
         final m = visibleMonster(targetId);
-        if (m == null || m.pos.chebyshev(player.pos) > d.range) {
+        if (m == null || m.pos.chebyshev(player.pos) > throwRange(d)) {
           return [const MessageEvent('Cible hors de portée ou hors de vue.')];
         }
         _removeOne(d);
+        final throwBonus = masteryLevel(Mastery.shooting) ~/ 3;
         events.add(MessageEvent('Vous lancez : ${d.name} !'));
         if (d.aoe > 0) {
           final center = m.pos;
           for (final v in List<Actor>.of(monsters)) {
             if (!v.alive || v.disguised || v.pos.chebyshev(center) > d.aoe) continue;
-            _rangedHit(d.atk + floor, v, events, onHit: d.onHit, chance: d.onHitChance, sure: true);
+            _rangedHit(d.atk + floor + throwBonus, v, events, onHit: d.onHit, chance: d.onHitChance, sure: true);
           }
           events.add(KamikazeEvent(-1, center, exploded: true));
         } else {
-          _rangedHit(d.atk + floor ~/ 2, m, events, onHit: d.onHit, chance: d.onHitChance);
+          _rangedHit(d.atk + floor ~/ 2 + throwBonus, m, events, onHit: d.onHit, chance: d.onHitChance);
         }
+        _train(Mastery.shooting, 1, events);
       case SkillAction():
         if (!skillReady) return [MessageEvent('${skill.name} : encore $skillCooldown tour(s) de recharge.')];
         final why = _useSkill(events);
         if (why != null) return [MessageEvent(why)];
-        skillCooldown = skill.cooldown;
+        skillCooldown = skillCooldownMax;
         skillUses++;
+        if (hasPerk(Mastery.charisma, 5)) show.addHype(8);
+        _train(Mastery.charisma, 3, events);
         events.add(SkillEvent(skill.id));
         if (skillUses >= 10) _unlock('showstopper', events);
         if (rng.chance(0.3)) _say(MaestroLines.skillUsed, events);
@@ -1241,7 +1282,11 @@ class Game {
   void _recalcStats() {
     final w = weapon, t = trinket;
     player.atk = baseAtk + (w?.atk ?? 0) + (t?.atk ?? 0) + (w == null ? 0 : plusOf(w));
-    player.def = baseDef + (w?.def ?? 0) + (t?.def ?? 0) + (t == null ? 0 : plusOf(t));
+    player.def = baseDef +
+        (w?.def ?? 0) +
+        (t?.def ?? 0) +
+        (t == null ? 0 : plusOf(t)) +
+        masteryLevel(Mastery.guard) ~/ 4;
     player.maxHp = baseMaxHp + (w?.maxHp ?? 0) + (t?.maxHp ?? 0);
     if (player.hp > player.maxHp) player.hp = player.maxHp;
   }
@@ -1454,8 +1499,8 @@ class Game {
       sprite: def.sprite,
       pos: pos,
       // Les monstres ordinaires se renforcent un peu à chaque étage (pas les boss, réglés à la main).
-      maxHp: (def.hp * (1 + 0.1 * depth) * (def.boss ? 1.25 : 1 + 0.09 * floor)).round(),
-      atk: def.atk + depth ~/ 3 + (def.boss ? 2 : floor ~/ 2),
+      maxHp: (def.hp * (1 + 0.1 * depth) * (def.boss ? 1.2 + 0.02 * floor : 1 + 0.11 * floor)).round(),
+      atk: def.atk + depth ~/ 3 + (def.boss ? 2 + floor ~/ 6 : floor ~/ 2 + floor ~/ 7),
       def: def.def + depth ~/ 4,
       monster: def,
     );
@@ -1538,6 +1583,10 @@ class Game {
     );
     // Gêné : les coups font moitié moins mal.
     var damage = (r.damage * power).round();
+    if (byPlayer && !ranged && !r.miss) {
+      damage += masteryLevel(Mastery.brawl) ~/ 3;
+      if (weapon == null && hasPerk(Mastery.brawl, 3)) damage += 2;
+    }
     if (!r.miss && attacker.hasStatus(Status.embarrassed)) damage = (damage / 2).ceil();
     events.add(AttackEvent(
       attackerId: attacker.id,
@@ -1554,6 +1603,7 @@ class Game {
       return;
     }
     target.hp -= damage;
+    if (byPlayer && !ranged) _train(Mastery.brawl, weapon == null ? 2 : 1, events);
     _onHitEffects(attacker, target, events);
     if (target.monster?.enrage == true && !target.enraged && target.alive && target.hp < target.maxHp / 2) {
       target.enraged = true;
@@ -1871,6 +1921,33 @@ class Game {
     }
   }
 
+  // ================================================================ compétences
+
+  /// Fait progresser la compétence [m] ; annonce les niveaux et les paliers.
+  void _train(Mastery m, int amount, List<GameEvent> events) {
+    final before = masteryLevel(m);
+    if (before >= masteryMax) return;
+    masteryXp[m] = masteryXpOf(m) + amount;
+    final after = masteryLevel(m);
+    if (after == before) return;
+    events.add(MasteryUpEvent(m.index, after, m.label));
+    events.add(MessageEvent('${m.label} niveau $after ! ${masteryBonusText(m, after)}.', MessageKind.good));
+    for (final p in masteryPerks) {
+      if (p.mastery == m && p.level > before && p.level <= after) {
+        events.add(MessageEvent('Nouveau palier : ${p.text}', MessageKind.good));
+      }
+    }
+    final lines = masteryLines[m]!;
+    if (after % 2 == 0 || masteryPerks.any((p) => p.mastery == m && p.level == after)) {
+      events.add(MessageEvent(
+          'MAESTRO : « ${lines[after % lines.length].replaceAll('{n}', '$after')} »', MessageKind.maestro));
+    }
+    show.addHype(2);
+    if (m == Mastery.guard) _recalcStats();
+    if (after >= 6) _unlock('specialist', events);
+    if (Mastery.values.every((x) => masteryLevel(x) >= 2)) _unlock('jack_of_all', events);
+  }
+
   // ================================================================ artisanat
 
   void _gainMaterial(Component c, int n, Pos pos, List<GameEvent> events) {
@@ -1888,13 +1965,20 @@ class Game {
     final yields = dismantleYield(inv.def);
     if (yields.isEmpty) return false;
     commands.add('D:$itemId');
+    freeEvents.clear();
     _removeOne(inv.def);
     // Plus aucun exemplaire (ni porté) : l'amélioration disparaît avec l'objet.
     final id = inv.def.id;
     if (_inv(id) == null && weapon?.id != id && trinket?.id != id && ranged?.id != id) itemUpgrades.remove(id);
-    yields.forEach((c, n) => materials[c] = materialCount(c) + n);
+    final bonusChance = masteryLevel(Mastery.crafting) * 0.08;
+    yields.forEach((c, n) {
+      final extra = bonusChance > 0 && rng.chance(bonusChance) ? 1 : 0;
+      materials[c] = materialCount(c) + n + extra;
+      if (extra > 0) freeEvents.add(PickupEvent(player.pos, '+1 ${c.label.toLowerCase()} (bonus)'));
+    });
     dismantled++;
-    _checkAchievements([]);
+    _train(Mastery.crafting, 1, freeEvents);
+    _checkAchievements(freeEvents);
     return true;
   }
 
@@ -1908,10 +1992,14 @@ class Game {
   /// Coût réel d'une recette (les améliorations coûtent plus cher à chaque niveau).
   Map<Component, int> recipeCost(Recipe r) {
     final slot = r.upgrade;
-    if (slot == null) return r.inputs;
+    if (slot == null) {
+      if (!hasPerk(Mastery.crafting, 7)) return r.inputs;
+      return {for (final e in r.inputs.entries) e.key: e.value >= 2 ? e.value - 1 : e.value};
+    }
     final target = upgradeTarget(slot);
     final level = target == null ? 0 : plusOf(target);
-    return {for (final e in r.inputs.entries) e.key: e.value * (level + 1)};
+    final discount = hasPerk(Mastery.crafting, 4) ? 0.75 : 1.0;
+    return {for (final e in r.inputs.entries) e.key: (e.value * (level + 1) * discount).ceil()};
   }
 
   /// Raison pour laquelle on ne peut pas fabriquer [r], ou null si c'est possible.
@@ -1934,6 +2022,7 @@ class Game {
   void _craft(Recipe r, List<GameEvent> events) {
     recipeCost(r).forEach((c, n) => materials[c] = materialCount(c) - n);
     crafted++;
+    _train(Mastery.crafting, 2, events);
     final slot = r.upgrade;
     if (slot != null) {
       final target = upgradeTarget(slot)!;
@@ -1974,7 +2063,9 @@ class Game {
       events.add(AttackEvent(attackerId: m.id, targetId: player.id, from: m.pos, to: player.pos, damage: 0, miss: true));
       events.add(MessageEvent('PARADE ! Vous bloquez ${_the(m)} et ripostez.', MessageKind.good));
       show.addHype(power > 1 ? 6 : 3);
-      _attack(player, m, events, power: power > 1 ? 1.0 : 0.6, sure: true);
+      _train(Mastery.guard, 2, events);
+      final strong = hasPerk(Mastery.guard, 6);
+      _attack(player, m, events, power: (power > 1 ? 1.0 : 0.6) + (strong ? 0.4 : 0), sure: true);
       if (power > 1 && m.alive) _applyStatus(m, Status.stun, events);
       return;
     }
@@ -2304,7 +2395,7 @@ class Game {
 
   /// Version du format de sauvegarde. À incrémenter dès que le moteur change de façon
   /// à rendre un ancien journal impossible à rejouer à l'identique.
-  static const saveVersion = 5;
+  static const saveVersion = 6;
 
   static String _encode(PlayerAction a) => switch (a) {
         MoveAction(:final dir) => 'm${dir.index}',

@@ -3,6 +3,7 @@
 // Usage : dart run tool/balance.dart [runs] [roleId]
 import 'package:donjon_en_direct/content/crafting.dart';
 import 'package:donjon_en_direct/content/items.dart';
+import 'package:donjon_en_direct/content/mastery.dart';
 import 'package:donjon_en_direct/content/monsters.dart';
 import 'package:donjon_en_direct/core/entities.dart';
 import 'package:donjon_en_direct/core/game.dart';
@@ -82,7 +83,7 @@ Result playOne(int seed, RunSetup setup) {
     }
     final adj = g.monsters.where((m) => m.pos.isAdjacent4(g.player.pos) && !m.disguised).toList();
     // Parer un coup lourd annoncé.
-    if (adj.any((m) => g.intentOf(m) == MonsterIntent.heavy) && g.stamina >= 2) {
+    if (adj.any((m) => g.intentOf(m) == MonsterIntent.heavy) && g.stamina >= g.parryCost) {
       g.act(const ParryAction());
       continue;
     }
@@ -94,14 +95,14 @@ Result playOne(int seed, RunSetup setup) {
             !m.pos.isAdjacent4(g.player.pos) &&
             (m.monster!.behavior == Behavior.ranged || m.monster!.behavior == Behavior.healer) &&
             g.ranged != null &&
-            m.pos.chebyshev(g.player.pos) <= g.ranged!.range)
+            m.pos.chebyshev(g.player.pos) <= g.shootRange)
         .toList();
-    if (shooters.isNotEmpty && g.ammoCount > 0 && (!g.ranged!.magic || g.stamina >= 2)) {
+    if (shooters.isNotEmpty && g.ammoCount > 0 && (!g.ranged!.magic || g.stamina >= g.spellCost)) {
       final t = g.turn;
       g.act(ShootAction(shooters.first.id));
       if (g.turn != t) continue;
     }
-    if (adj.isNotEmpty && g.stamina >= 4) {
+    if (adj.isNotEmpty && g.stamina >= g.heavyCost + 2) {
       final t = g.turn;
       g.act(HeavyAction(Dir.fromDelta(adj.first.pos - g.player.pos)!));
       if (g.turn != t) continue;
@@ -143,9 +144,15 @@ Result playOne(int seed, RunSetup setup) {
     final res = g.act(MoveAction(Dir.fromDelta(path.first - g.player.pos)!));
     if (res.isEmpty) g.act(const WaitAction());
   }
+  for (final m in Mastery.values) {
+    masterySum[m] = (masterySum[m] ?? 0) + g.masteryLevel(m);
+  }
   return Result(g.floor, g.playerLevel, g.turn, g.killedBy ?? (g.victory ? 'VICTOIRE' : 'timeout'), g.victory, viral,
       g.turn);
 }
+
+/// Somme des niveaux de compétence en fin de run (pour la moyenne).
+final masterySum = <Mastery, int>{};
 
 void main(List<String> args) {
   final runs = args.isNotEmpty ? int.parse(args[0]) : 200;
@@ -162,6 +169,8 @@ void main(List<String> args) {
   final viral = results.fold<int>(0, (s, r) => s + r.viralTurns) / results.fold<int>(1, (s, r) => s + r.totalTurns);
   print('Runs: $runs  rôle: $role  étage moyen: ${avg.toStringAsFixed(2)}  victoires: '
       '${results.where((r) => r.victory).length}  temps en VIRAL: ${(viral * 100).toStringAsFixed(1)}%');
+  print('Compétences moyennes en fin de run : '
+      '${[for (final m in Mastery.values) '${m.label} ${((masterySum[m] ?? 0) / runs).toStringAsFixed(1)}'].join(', ')}');
   print('Répartition des étages atteints :');
   for (final f in floors.keys.toList()..sort()) {
     print('  étage ${f.toString().padLeft(2)} : ${'#' * (floors[f]! * 60 ~/ runs)} ${floors[f]}');

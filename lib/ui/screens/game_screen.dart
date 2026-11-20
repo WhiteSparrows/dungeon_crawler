@@ -578,20 +578,21 @@ class _CombatBar extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           _ModeButton(
-              label: 'LOURD 2',
+              label: 'LOURD ${g.heavyCost}',
               active: c.mode == CombatMode.heavy,
-              enabled: g.stamina >= 2,
+              enabled: g.stamina >= g.heavyCost,
               onTap: () => c.setMode(CombatMode.heavy)),
           _ModeButton(
               label: 'POUSSER 1',
               active: c.mode == CombatMode.shove,
               enabled: g.stamina >= 1,
               onTap: () => c.setMode(CombatMode.shove)),
-          _ModeButton(label: 'PARER 2', active: false, enabled: g.stamina >= 2, onTap: c.parry),
+          _ModeButton(
+              label: 'PARER ${g.parryCost}', active: false, enabled: g.stamina >= g.parryCost, onTap: c.parry),
           _ModeButton(
             label: throwing ? 'ANNULER' : shootLabel,
             active: aiming,
-            enabled: throwing || (w != null && g.ammoCount > 0 && (!w.magic || g.stamina >= 2)),
+            enabled: throwing || (w != null && g.ammoCount > 0 && (!w.magic || g.stamina >= g.spellCost)),
             onTap: throwing ? c.toggleShoot : c.toggleShoot,
           ),
         ],
