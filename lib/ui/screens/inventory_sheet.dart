@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../content/crafting.dart';
 import '../../content/items.dart';
 import '../../core/game.dart';
 import '../game_controller.dart';
@@ -35,6 +36,12 @@ class _InventorySheetState extends State<InventorySheet> {
   /// Objet sélectionné : id d'un objet du sac, ou 'weapon' / 'trinket' pour l'équipement.
   String? selected;
 
+  /// Onglet atelier (sinon : le sac).
+  bool _workshop = false;
+
+  /// Dernier message de l'atelier (fabrication refusée, démontage…).
+  String? _note;
+
   Game get g => widget.c.game;
 
   void _do(PlayerAction a) {
@@ -60,50 +67,66 @@ class _InventorySheetState extends State<InventorySheet> {
                 children: [
                   Row(
                     children: [
-                      Text('SAC', style: pixel(14, color: Palette.gold)),
+                      _tab(
+                        'SAC',
+                        !_workshop,
+                        () => setState(() => _workshop = false),
+                      ),
+                      const SizedBox(width: 8),
+                      _tab(
+                        'ATELIER',
+                        _workshop,
+                        () => setState(() => _workshop = true),
+                      ),
                       const Spacer(),
                       Text(
-                        'ATQ ${g.player.atk}  DEF ${g.player.def}  CRIT ${(g.critChance * 100).round()}%',
-                        style: pixel(8, color: Palette.muted),
+                        'ATQ ${g.player.atk} DEF ${g.player.def}',
+                        style: pixel(7, color: Palette.muted),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                  if (_workshop)
+                    ..._workshopView()
+                  else ...[
+                    const SizedBox(height: 14),
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _slot('ARME', 'weapon', g.weapon)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _slot('DISTANCE', 'ranged', g.ranged),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _slot('ACCESSOIRE', 'trinket', g.trinket),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'OBJETS ${g.inventory.length}/${g.maxSlots}',
+                      style: pixel(8, color: Palette.muted),
+                    ),
+                    const SizedBox(height: 8),
+                    GridView.count(
+                      crossAxisCount: 6,
+                      shrinkWrap: true,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                      physics: const NeverScrollableScrollPhysics(),
                       children: [
-                        Expanded(child: _slot('ARME', 'weapon', g.weapon)),
-                        const SizedBox(width: 6),
-                        Expanded(child: _slot('DISTANCE', 'ranged', g.ranged)),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: _slot('ACCESSOIRE', 'trinket', g.trinket),
-                        ),
+                        for (var i = 0; i < g.maxSlots; i++)
+                          i < g.inventory.length
+                              ? _cell(g.inventory[i].def, g.inventory[i].count)
+                              : _emptyCell(),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'OBJETS ${g.inventory.length}/${g.maxSlots}',
-                    style: pixel(8, color: Palette.muted),
-                  ),
-                  const SizedBox(height: 8),
-                  GridView.count(
-                    crossAxisCount: 6,
-                    shrinkWrap: true,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: [
-                      for (var i = 0; i < g.maxSlots; i++)
-                        i < g.inventory.length
-                            ? _cell(g.inventory[i].def, g.inventory[i].count)
-                            : _emptyCell(),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  if (sel != null) _details(sel) else _hint(),
+                    const SizedBox(height: 14),
+                    if (sel != null) _details(sel) else _hint(),
+                  ],
                 ],
               ),
             ),
@@ -129,6 +152,178 @@ class _InventorySheetState extends State<InventorySheet> {
         }
         return null;
     }
+  }
+
+  Widget _tab(String label, bool active, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: active
+            ? Palette.gold.withValues(alpha: 0.2)
+            : Colors.transparent,
+        border: Border.all(
+          color: active ? Palette.gold : Palette.panelBorder,
+          width: 2,
+        ),
+      ),
+      child: Text(
+        label,
+        style: pixel(10, color: active ? Palette.gold : Palette.muted),
+      ),
+    ),
+  );
+
+  String _yieldText(Map<Component, int> y) =>
+      y.entries.map((e) => '${e.key.label} x${e.value}').join(', ');
+
+  // ---------------------------------------------------------------- atelier
+
+  List<Widget> _workshopView() {
+    return [
+      const SizedBox(height: 12),
+      Text('BOURSE', style: pixel(8, color: Palette.muted)),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final c in Component.values)
+            Container(
+              padding: const EdgeInsets.fromLTRB(4, 3, 8, 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2E2540),
+                border: Border.all(color: Palette.panelBorder),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SpriteIcon(widget.atlas, c.sprite, size: 22, tint: c.tint),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${g.materialCount(c)}',
+                    style: pixel(
+                      8,
+                      color: g.materialCount(c) > 0
+                          ? Palette.text
+                          : Palette.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+      if (_note != null) ...[
+        const SizedBox(height: 8),
+        Text(
+          _note!,
+          style: const TextStyle(color: Palette.maestro, fontSize: 12),
+        ),
+      ],
+      const SizedBox(height: 12),
+      Text('RECETTES', style: pixel(8, color: Palette.muted)),
+      const SizedBox(height: 6),
+      for (final r in recipes) _recipe(r),
+      const Padding(
+        padding: EdgeInsets.only(top: 6),
+        child: Text(
+          'Démontez les objets inutiles depuis l\'onglet SAC pour récupérer des composants. Fabriquer prend un tour.',
+          style: TextStyle(color: Palette.muted, fontSize: 11),
+        ),
+      ),
+    ];
+  }
+
+  Widget _recipe(Recipe r) {
+    final why = g.whyNotCraft(r);
+    final cost = g.recipeCost(r);
+    final out = r.output == null ? null : itemById(r.output!);
+    final target = r.upgrade == null ? null : g.upgradeTarget(r.upgrade!);
+    final icon = out ?? target;
+    final title = r.upgrade == null
+        ? r.name
+        : target == null
+        ? r.name
+        : '${r.name} : ${g.nameOf(target)} → +${g.plusOf(target) + 1}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1424),
+        border: Border.all(
+          color: why == null
+              ? Palette.gold.withValues(alpha: 0.7)
+              : Palette.panelBorder,
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: icon == null
+                ? null
+                : SpriteIcon(
+                    widget.atlas,
+                    g.spriteOf(icon),
+                    size: 32,
+                    tint: g.tintOf(icon),
+                  ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: why == null ? Palette.text : Palette.muted,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final e in cost.entries)
+                      Text(
+                        '${e.key.label} ${g.materialCount(e.key)}/${e.value}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: g.materialCount(e.key) >= e.value
+                              ? const Color(0xFF8BE58B)
+                              : const Color(0xFFFF7A7A),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: why == null ? Palette.gold : const Color(0xFF3D3150),
+              disabledBackgroundColor: const Color(0xFF3D3150),
+              shape: const RoundedRectangleBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+            onPressed: why == null
+                ? () {
+                    widget.c.inventoryAction(CraftAction(r.id));
+                    setState(() => _note = 'Fabriqué : $title.');
+                  }
+                : () => setState(() => _note = why),
+            child: Text(
+              'FAIRE',
+              style: pixel(8, color: why == null ? Palette.bg : Palette.muted),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _slot(String label, String key, ItemDef? d) {
@@ -254,6 +449,16 @@ class _InventorySheetState extends State<InventorySheet> {
           () => _do(UseItemAction(d.id)),
           primary: true,
         ),
+      if (!equipped && g.dismantleYield(d).isNotEmpty)
+        _btn('DEMONTER', () {
+          final y = g.dismantleYield(d);
+          if (widget.c.dismantle(d.id)) {
+            setState(() {
+              selected = null;
+              _note = 'Démonté : ${_yieldText(y)}.';
+            });
+          }
+        }),
       if (!equipped) _btn('JETER', () => _do(DropAction(d.id))),
     ];
     return Container(
@@ -356,14 +561,14 @@ class _InventorySheetState extends State<InventorySheet> {
                   shape: const RoundedRectangleBorder(),
                 ),
                 onPressed: onTap,
-                child: Text(label, style: pixel(9, color: Palette.bg)),
+                child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, style: pixel(9, color: Palette.bg))),
               )
             : OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   shape: const RoundedRectangleBorder(),
                 ),
                 onPressed: onTap,
-                child: Text(label, style: pixel(9)),
+                child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, style: pixel(9))),
               ),
       );
 }

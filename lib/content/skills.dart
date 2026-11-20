@@ -16,7 +16,7 @@ const skillDefs = <SkillDef>[
   SkillDef('live', 'Live sauvage',
       'Tous les monstres en vue sont gênés 5 tours. Hype +15.', 15),
   SkillDef('warmup', 'Échauffement',
-      'Soigne 20 % des PV max et dégâts doublés pendant 4 tours.', 26),
+      'Soigne 20 % des PV max et dégâts doublés pendant 4 tours.', 40),
   SkillDef('bribe', 'Pot-de-vin',
       "Le monstre en vue le plus proche (hors boss) prend l'argent et quitte l'émission. Coûte 15 + 3 × étage pièces.",
       12),

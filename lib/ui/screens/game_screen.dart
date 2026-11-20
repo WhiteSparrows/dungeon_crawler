@@ -942,7 +942,7 @@ class _ActionBar extends StatelessWidget {
             onTap: c.wait,
           ),
           _ActionButton(
-            label: 'SAC ${g.inventory.length}/10',
+            label: 'SAC ${g.inventory.length}/${g.maxSlots}',
             icon: const Icon(Icons.backpack, color: Palette.gold, size: 26),
             onTap: g.gameOver ? null : onBag,
           ),

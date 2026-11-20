@@ -1,6 +1,7 @@
 // ignore_for_file: avoid_print
 // Simulateur d'équilibrage : un bot « raisonnable » joue des centaines de runs.
 // Usage : dart run tool/balance.dart [runs] [roleId]
+import 'package:donjon_en_direct/content/crafting.dart';
 import 'package:donjon_en_direct/content/items.dart';
 import 'package:donjon_en_direct/content/monsters.dart';
 import 'package:donjon_en_direct/core/entities.dart';
@@ -56,6 +57,16 @@ Result playOne(int seed, RunSetup setup) {
       final cur = d.kind == ItemKind.weapon ? g.weapon : g.trinket;
       if (cur == null || _value(d) > _value(cur)) {
         g.act(EquipAction(d.id));
+      }
+    }
+    // Artisanat : démonter l'équipement en trop, puis fabriquer l'utile.
+    for (final inv in List<InvItem>.of(g.inventory)) {
+      if (inv.def.equippable) g.dismantle(inv.def.id);
+    }
+    for (final id in ['u_weapon', 'r_potion', if (g.ammoCount < 6) 'r_stones', 'u_trinket', 'u_ranged']) {
+      if (g.whyNotCraft(recipeById(id)) == null) {
+        g.act(CraftAction(id));
+        break;
       }
     }
     if (g.player.hpRatio < 0.35 && g.healPotions > 0) {

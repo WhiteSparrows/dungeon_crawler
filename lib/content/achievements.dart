@@ -102,6 +102,12 @@ const achievementDefs = <AchievementDef>[
       "Il a gonflé, il a explosé, et vous étiez déjà ailleurs. Le kamikaze est mort pour rien. "
           "Comme tous les kamikazes, me direz-vous. Mais lui, en plus, c'était un rat.",
       secret: true),
+  AchievementDef('crafter', 'Bricoleur du dimanche', "Fabriquer 5 choses à l'atelier.", BoxTier.bronze,
+      "Cinq créations faites main ! Notre émission de déco a appelé, elle veut vous voir. Vous n'irez pas, "
+          "vous serez mort, mais c'est gentil de leur part."),
+  AchievementDef('recycler', 'Recyclage militant', 'Démonter 10 objets.', BoxTier.bronze,
+      "Dix objets réduits en pièces détachées. Les écologistes applaudissent. Les objets, eux, ne disent rien. "
+          "Ils ne peuvent plus."),
   AchievementDef('corruption', 'Corruption passive', 'Soudoyer un monstre.', BoxTier.bronze,
       "Vous avez payé un monstre pour qu'il s'en aille. Il a accepté. Le donjon est donc un lieu de travail "
           "comme un autre. Les syndicats de monstres saluent une « négociation constructive ».",

@@ -17,7 +17,7 @@ void main() {
 
     test('Prof de gym : plus de PV, plus d\'attaque, pas de potion', () {
       final g = Game.newRun(1, setup: const RunSetup(roleId: 'gym'));
-      expect(g.player.maxHp, 42);
+      expect(g.player.maxHp, 38);
       expect(g.player.atk, 3 + 1 + 1);
       expect(g.healPotions, 0);
       expect(g.player.sprite, roleById('gym').sprite);

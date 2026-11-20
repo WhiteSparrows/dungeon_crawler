@@ -1,4 +1,5 @@
 import '../content/achievements.dart';
+import '../content/crafting.dart';
 import '../content/features.dart';
 import '../content/interviews.dart';
 import '../content/items.dart';
@@ -88,6 +89,12 @@ class ShootAction extends PlayerAction {
 }
 
 /// Lance l'objet [itemId] sur le monstre [targetId].
+/// Fabrique la recette [recipeId] à l'atelier (1 tour).
+class CraftAction extends PlayerAction {
+  const CraftAction(this.recipeId);
+  final String recipeId;
+}
+
 class ThrowAction extends PlayerAction {
   const ThrowAction(this.itemId, this.targetId);
   final String itemId;
@@ -242,6 +249,18 @@ class Game {
   Actor? boss;
   bool _bossAnnounced = false;
 
+  // Artisanat
+  /// Bourse de composants (ne prend pas de place dans le sac).
+  final materials = <Component, int>{};
+
+  /// Niveau d'amélioration de chaque équipement (par identifiant d'objet).
+  final itemUpgrades = <String, int>{};
+  int crafted = 0;
+  int dismantled = 0;
+
+  int plusOf(ItemDef d) => itemUpgrades[d.id] ?? 0;
+  int materialCount(Component c) => materials[c] ?? 0;
+
   // Combat tactique
   ItemDef? ranged;
   static const maxStamina = 5;
@@ -370,7 +389,11 @@ class Game {
   bool get bagFull => inventory.length >= maxSlots;
 
   /// Nom affiché d'un objet (aspect si fiole non identifiée).
-  String nameOf(ItemDef d) => d.mystery && !identified.contains(d.effect) ? _looks[d.effect]!.$1 : d.name;
+  String nameOf(ItemDef d) {
+    if (d.mystery && !identified.contains(d.effect)) return _looks[d.effect]!.$1;
+    final plus = plusOf(d);
+    return plus > 0 ? '${d.name} +$plus' : d.name;
+  }
 
   /// Description affichée (inconnue tant que non identifiée).
   String descOf(ItemDef d) =>
@@ -533,7 +556,13 @@ class Game {
           if (ammoCount <= 0) return [MessageEvent('Plus de munitions (${itemById(w.ammo!).name}).')];
           _removeOne(itemById(w.ammo!));
         }
-        _rangedHit(w.atk + playerLevel ~/ 2, m, events, onHit: w.onHit, chance: w.onHitChance, crit: w.crit);
+        _rangedHit(w.atk + plusOf(w) + playerLevel ~/ 2, m, events,
+            onHit: w.onHit, chance: w.onHitChance, crit: w.crit);
+      case CraftAction(:final recipeId):
+        final r = recipeById(recipeId);
+        final why = whyNotCraft(r);
+        if (why != null) return [MessageEvent(why)];
+        _craft(r, events);
       case ThrowAction(:final itemId, :final targetId):
         final inv = _inv(itemId);
         if (inv == null || inv.def.kind != ItemKind.throwable) return const [];
@@ -1211,8 +1240,8 @@ class Game {
 
   void _recalcStats() {
     final w = weapon, t = trinket;
-    player.atk = baseAtk + (w?.atk ?? 0) + (t?.atk ?? 0);
-    player.def = baseDef + (w?.def ?? 0) + (t?.def ?? 0);
+    player.atk = baseAtk + (w?.atk ?? 0) + (t?.atk ?? 0) + (w == null ? 0 : plusOf(w));
+    player.def = baseDef + (w?.def ?? 0) + (t?.def ?? 0) + (t == null ? 0 : plusOf(t));
     player.maxHp = baseMaxHp + (w?.maxHp ?? 0) + (t?.maxHp ?? 0);
     if (player.hp > player.maxHp) player.hp = player.maxHp;
   }
@@ -1425,8 +1454,8 @@ class Game {
       sprite: def.sprite,
       pos: pos,
       // Les monstres ordinaires se renforcent un peu à chaque étage (pas les boss, réglés à la main).
-      maxHp: (def.hp * (1 + 0.1 * depth) * (def.boss ? 1 : 1 + 0.06 * floor)).round(),
-      atk: def.atk + depth ~/ 3 + (def.boss ? 0 : floor ~/ 3),
+      maxHp: (def.hp * (1 + 0.1 * depth) * (def.boss ? 1.25 : 1 + 0.09 * floor)).round(),
+      atk: def.atk + depth ~/ 3 + (def.boss ? 2 : floor ~/ 2),
       def: def.def + depth ~/ 4,
       monster: def,
     );
@@ -1661,6 +1690,11 @@ class Game {
       _say(MaestroLines.firstKill, events, monster: victim.name.toLowerCase());
     }
     if (victim.isBoss) {
+      _gainMaterial(Component.crystal, 3, victim.pos, events);
+    } else if (rng.chance(0.2)) {
+      _gainMaterial(dropOf(id), 1, victim.pos, events);
+    }
+    if (victim.isBoss) {
       _bossDefeated(victim, events);
     } else if (id == 'mimic') {
       _gainBox(BoxTier.argent, 'Butin de la mimique', events);
@@ -1738,6 +1772,8 @@ class Game {
     if (_butterKills >= 5) _unlock('butter', events);
     if (_mimicKills >= 1) _unlock('mimic', events);
     if (floor >= 5) _unlock('deep', events);
+    if (crafted >= 5) _unlock('crafter', events);
+    if (dismantled >= 10) _unlock('recycler', events);
     if (_killTurns.length >= 3 && _killTurns.last - _killTurns[_killTurns.length - 3] <= 6) {
       _unlock('carnage', events);
     }
@@ -1832,6 +1868,88 @@ class Game {
         return sees && dist <= 3;
       default:
         return false;
+    }
+  }
+
+  // ================================================================ artisanat
+
+  void _gainMaterial(Component c, int n, Pos pos, List<GameEvent> events) {
+    materials[c] = materialCount(c) + n;
+    events.add(PickupEvent(pos, '+$n ${c.label.toLowerCase()}'));
+  }
+
+  /// Ce que rapporterait le démontage de [d].
+  Map<Component, int> dismantleYield(ItemDef d) => baseYield(d);
+
+  /// Démonte un objet du sac (gratuit, sans tour). Faux si impossible.
+  bool dismantle(String itemId) {
+    final inv = _inv(itemId);
+    if (inv == null || gameOver) return false;
+    final yields = dismantleYield(inv.def);
+    if (yields.isEmpty) return false;
+    commands.add('D:$itemId');
+    _removeOne(inv.def);
+    // Plus aucun exemplaire (ni porté) : l'amélioration disparaît avec l'objet.
+    final id = inv.def.id;
+    if (_inv(id) == null && weapon?.id != id && trinket?.id != id && ranged?.id != id) itemUpgrades.remove(id);
+    yields.forEach((c, n) => materials[c] = materialCount(c) + n);
+    dismantled++;
+    _checkAchievements([]);
+    return true;
+  }
+
+  /// Équipement visé par une amélioration.
+  ItemDef? upgradeTarget(UpgradeSlot slot) => switch (slot) {
+        UpgradeSlot.weapon => weapon,
+        UpgradeSlot.trinket => trinket,
+        UpgradeSlot.ranged => ranged,
+      };
+
+  /// Coût réel d'une recette (les améliorations coûtent plus cher à chaque niveau).
+  Map<Component, int> recipeCost(Recipe r) {
+    final slot = r.upgrade;
+    if (slot == null) return r.inputs;
+    final target = upgradeTarget(slot);
+    final level = target == null ? 0 : plusOf(target);
+    return {for (final e in r.inputs.entries) e.key: e.value * (level + 1)};
+  }
+
+  /// Raison pour laquelle on ne peut pas fabriquer [r], ou null si c'est possible.
+  String? whyNotCraft(Recipe r) {
+    final slot = r.upgrade;
+    if (slot != null) {
+      final target = upgradeTarget(slot);
+      if (target == null) return "Il faut d'abord équiper un objet à améliorer.";
+      if (plusOf(target) >= maxUpgrade) return '${target.name} est déjà au maximum (+$maxUpgrade).';
+    } else {
+      final out = itemById(r.output!);
+      if (bagFull && _inv(out.id) == null) return 'Sac plein : faites de la place.';
+    }
+    for (final e in recipeCost(r).entries) {
+      if (materialCount(e.key) < e.value) return 'Il manque : ${e.key.label} (${materialCount(e.key)}/${e.value}).';
+    }
+    return null;
+  }
+
+  void _craft(Recipe r, List<GameEvent> events) {
+    recipeCost(r).forEach((c, n) => materials[c] = materialCount(c) - n);
+    crafted++;
+    final slot = r.upgrade;
+    if (slot != null) {
+      final target = upgradeTarget(slot)!;
+      itemUpgrades[target.id] = plusOf(target) + 1;
+      _recalcStats();
+      events.add(PickupEvent(player.pos, '+1'));
+      events.add(MessageEvent('Atelier : ${nameOf(target)} !', MessageKind.good));
+    } else {
+      final out = itemById(r.output!);
+      _addToBag(out);
+      events.add(PickupEvent(player.pos, '+1'));
+      events.add(MessageEvent('Atelier : vous fabriquez ${r.name}.', MessageKind.good));
+    }
+    if (rng.chance(0.15)) {
+      events.add(const MessageEvent("MAESTRO : « Du fait main ! Le public adore l'artisanat. Moi, je m'endors. »",
+          MessageKind.maestro));
     }
   }
 
@@ -2186,7 +2304,7 @@ class Game {
 
   /// Version du format de sauvegarde. À incrémenter dès que le moteur change de façon
   /// à rendre un ancien journal impossible à rejouer à l'identique.
-  static const saveVersion = 4;
+  static const saveVersion = 5;
 
   static String _encode(PlayerAction a) => switch (a) {
         MoveAction(:final dir) => 'm${dir.index}',
@@ -2203,6 +2321,7 @@ class Game {
         ParryAction() => 'y',
         ShootAction(:final targetId) => 's:$targetId',
         ThrowAction(:final itemId, :final targetId) => 'T:$itemId|$targetId',
+        CraftAction(:final recipeId) => 'C:$recipeId',
       };
 
   Map<String, Object?> toSave() => {
@@ -2284,6 +2403,10 @@ class Game {
       case 'T':
         final parts = arg.split('|');
         act(ThrowAction(parts[0], int.parse(parts[1])));
+      case 'C':
+        act(CraftAction(arg));
+      case 'D':
+        dismantle(arg);
       case 'X':
         abandon();
       case 'G':

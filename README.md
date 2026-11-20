@@ -71,6 +71,18 @@ couper les conseils ou les revoir depuis le début.
 - **Sac** : 12 places, +2 tous les 3 niveaux, banane de touriste (+3), sac de randonnée (+6), contrat
   « Poches cousues main » (+2 par niveau).
 
+## Artisanat
+
+- **Démonter** : dans le SAC, touchez un objet en trop puis DÉMONTER (gratuit, ne coûte pas de tour) pour
+  le réduire en **composants** : ferraille, bois, tissu, os, gelée, poudre, cristal, circuit imprimé.
+  Plus l'objet est rare, plus il rapporte. Les monstres en lâchent aussi parfois, les boss du cristal.
+- Les composants vont dans la **bourse** et ne prennent pas de place dans le sac.
+- **Onglet ATELIER** (1 tour par fabrication) : munitions (cailloux, flèches), objets à lancer (couteau,
+  brique, bocal, bombe, sauce piquante), potion, pansement, sifflet, baril, télécommande, banane de
+  touriste et sac de randonnée.
+- **Améliorations** jusqu'à +5 (coût croissant) : affûter l'arme (ATQ +1), renforcer l'accessoire
+  (DEF +1), calibrer l'arme à distance (dégâts +1).
+
 ## Compétences et monstres tactiques
 
 - **Bouton POUVOIR** : chaque rôle a une compétence avec temps de recharge (appui long = description).

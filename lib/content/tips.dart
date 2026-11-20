@@ -47,6 +47,10 @@ const tipDefs = <TipDef>[
   TipDef('bag', 'Un objet à équiper',
       "Ouvrez le SAC : touchez un objet pour voir ses effets et le comparer à ce que vous portez, puis "
           "ÉQUIPER. Une arme et un accessoire à la fois. Équiper, boire ou jeter prend un tour."),
+  TipDef('craft', "L'atelier",
+      "Vous avez récupéré des composants (ferraille, os, gelée…). Ils vont dans votre bourse, sans prendre de "
+          "place. Dans le SAC : touchez un objet inutile puis DÉMONTER pour en tirer des composants, et ouvrez "
+          "l'onglet ATELIER pour fabriquer munitions, bombes, potions, ou affûter votre arme."),
   TipDef('lootbox', 'Une loot box',
       "Le coffre doré qui clignote en bas à droite, ce sont vos loot boxes. Touchez-le pour les ouvrir, "
           "c'est gratuit et ça ne prend pas de tour. Vous en gagnez avec les succès, les montées de niveau, "

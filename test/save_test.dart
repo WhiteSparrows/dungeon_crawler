@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:donjon_en_direct/content/crafting.dart';
 import 'package:donjon_en_direct/core/entities.dart';
 import 'package:donjon_en_direct/core/game.dart';
 import 'package:donjon_en_direct/core/grid.dart';
@@ -24,6 +25,8 @@ String signature(Game g) => [
       g.weapon?.id,
       g.skillCooldown,
       g.stamina,
+      [for (final e in g.materials.entries) '${e.key.name}${e.value}'].join(','),
+      [for (final e in g.itemUpgrades.entries) '${e.key}${e.value}'].join(','),
       g.ranged?.id,
       g.trinket?.id,
       [for (final i in g.inventory) '${i.def.id}x${i.count}'].join(','),
@@ -58,6 +61,10 @@ void play(Game g, Rng r, int steps) {
       continue;
     }
     if (g.pendingBoxes.isNotEmpty && r.chance(0.3)) g.openBox();
+    // Artisanat : démonter un objet au hasard, fabriquer ce qui est possible.
+    if (g.inventory.isNotEmpty && r.chance(0.1)) g.dismantle(r.pick(g.inventory).def.id);
+    final craftable = recipes.where((x) => g.whyNotCraft(x) == null).toList();
+    if (craftable.isNotEmpty && r.chance(0.3)) g.act(CraftAction(r.pick(craftable).id));
     for (final inv in List<InvItem>.of(g.inventory)) {
       if (inv.def.equippable && r.chance(0.5)) g.act(EquipAction(inv.def.id));
     }

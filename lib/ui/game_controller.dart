@@ -273,6 +273,16 @@ class GameController extends ChangeNotifier {
     _perform(action);
   }
 
+  /// Démonte un objet du sac (gratuit).
+  bool dismantle(String itemId) {
+    final ok = game.dismantle(itemId);
+    if (ok) {
+      GameAudio.instance.play(Sfx.click);
+      notifyListeners();
+    }
+    return ok;
+  }
+
   /// Ouvre la prochaine loot box (ne consomme pas de tour).
   BoxResult? openBox() {
     final r = game.openBox();
