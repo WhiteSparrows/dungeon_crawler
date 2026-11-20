@@ -299,6 +299,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
                 _Hud(c: c, atlas: widget.atlas, known: _allAchievements),
                 _ShowBar(c: c, onTap: _openRegie),
                 if (c.game.floorMod != null) _ModBanner(mod: c.game.floorMod!),
+                if (c.game.questLine != null) _QuestBanner(text: c.game.questLine!),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, box) => Stack(
@@ -651,6 +652,30 @@ class _ModBanner extends StatelessWidget {
         TextSpan(children: [
           TextSpan(text: '${mod.label} : ', style: const TextStyle(color: Palette.gold, fontWeight: FontWeight.bold)),
           TextSpan(text: mod.desc, style: const TextStyle(color: Palette.text)),
+        ]),
+        style: const TextStyle(fontSize: 12),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+class _QuestBanner extends StatelessWidget {
+  const _QuestBanner({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFF13261A),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Text.rich(
+        TextSpan(children: [
+          const TextSpan(text: 'QUÊTE : ', style: TextStyle(color: Color(0xFF8BE58B), fontWeight: FontWeight.bold)),
+          TextSpan(text: text, style: const TextStyle(color: Palette.text)),
         ]),
         style: const TextStyle(fontSize: 12),
         maxLines: 1,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../content/features.dart';
 import '../content/sprites.dart';
 import '../content/tips.dart';
 import '../core/game.dart';
@@ -32,7 +33,8 @@ String? nextInGameTip(Game g, Set<String> seen) {
     'mastery': () => g.masteryXp.values.any((n) => n >= 4),
     'bag': () => g.inventory.any((i) => i.def.equippable),
     'chest': () => g.chests.any((c) => shown(c.pos)) || g.monsters.any((m) => m.disguised && shown(m.pos)),
-    'feature': () => g.features.any((f) => !f.used && shown(f.pos)),
+    'feature': () => g.features.any((f) => !f.used && f.kind != FeatureKind.npc && shown(f.pos)),
+    'npc': () => g.features.any((f) => !f.used && f.kind == FeatureKind.npc && shown(f.pos)),
     'stairs': () => shown(g.level.stairs),
     'timer': () => g.turnsLeft <= 40,
     'hud': () => g.turn >= 4,

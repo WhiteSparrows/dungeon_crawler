@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../content/features.dart';
 import '../../content/sprites.dart';
 import '../../core/entities.dart';
 import '../../core/events.dart';
@@ -127,8 +128,23 @@ class DungeonPainter extends CustomPainter {
       if (!g.explored.contains(f.pos)) continue;
       final dst = cam.toScreen(f.pos.x.toDouble(), f.pos.y.toDouble()) & Size(ts, ts);
       final seen = g.visible.contains(f.pos);
-      atlas.draw(canvas, f.kind.sprite, dst, opacity: f.used ? 0.35 : (seen ? 1 : 0.5));
-      if (!f.used && seen) _text(canvas, '?', dst.topCenter + Offset(0, -ts * 0.05), Palette.gold, ts * 0.28);
+      final tint = g.featureTint(f);
+      final npc = f.kind == FeatureKind.npc;
+      atlas.draw(canvas, g.featureSprite(f), dst,
+          opacity: f.used ? (npc ? 0.6 : 0.35) : (seen ? 1 : 0.5), tint: tint == null ? null : Color(tint));
+      if (!f.used && seen) {
+        final q = g.quest;
+        final waiting = npc && q != null && q.accepted && !q.done;
+        _text(canvas, npc ? (waiting ? '...' : '!') : '?', dst.topCenter + Offset(0, -ts * 0.05),
+            waiting ? Palette.muted : Palette.gold, ts * 0.28);
+      }
+    }
+    // --- Objet perdu (quête)
+    final lost = g.quest?.itemPos;
+    if (lost != null && g.explored.contains(lost)) {
+      final dst = (cam.toScreen(lost.x.toDouble(), lost.y.toDouble()) & Size(ts, ts)).deflate(ts * 0.12);
+      final pulse = 0.75 + 0.25 * math.sin(c.nowMs / 220);
+      atlas.draw(canvas, 101, dst, opacity: g.visible.contains(lost) ? pulse : 0.5, tint: const Color(0xFFFFD84D));
     }
 
     // --- Pièges repérés

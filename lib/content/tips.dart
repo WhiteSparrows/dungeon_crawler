@@ -65,6 +65,9 @@ const tipDefs = <TipDef>[
   TipDef('feature', 'Un lieu interactif',
       "Le « ? » doré signale un lieu interactif : fontaine, autel de sponsor, distributeur… Marchez dessus "
           "pour faire un choix. Les conséquences sont souvent bonnes. Souvent."),
+  TipDef('npc', 'Un personnage',
+      "Le « ! » doré signale un PNJ. Allez lui parler (marchez dessus) : il vous proposera une quête pour cet "
+          "étage. Accomplissez-la, revenez le voir, et il vous récompensera. En descendant, la quête est perdue."),
   TipDef('stairs', "L'escalier",
       "Voilà la sortie de l'étage. Marchez dessus puis touchez DESCENDRE (ou touchez-vous). Vous passerez "
           "par mon plateau pour une interview avant l'étage suivant. Tous les 3 étages, un boss garde l'escalier."),

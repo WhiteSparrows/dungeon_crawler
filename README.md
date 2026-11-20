@@ -97,6 +97,21 @@ SAC, onglet STATS. Chaque montée est annoncée à l'écran et commentée par MA
 | Bricolage | démontant, fabriquant | +8 % de composant bonus / niv. | 4 : améliorations -25 % · 7 : recettes moins chères |
 | Charisme | utilisant son pouvoir | recharge -4 % / niv. | 5 : +audience à chaque pouvoir |
 
+## Quêtes des PNJ
+
+Un personnage non joueur attend sur le premier étage, puis sur environ un étage sur deux (« ! » doré
+au-dessus de lui). Marchez dessus pour lui parler : il propose une quête valable pour l'étage, à accepter ou
+refuser. Le suivi s'affiche sous la barre d'audience ; une fois l'objectif atteint, revenez le voir pour la
+récompense (or + bonus). En descendant, la quête en cours est perdue.
+
+| PNJ | Quête | Récompense |
+|---|---|---|
+| Raymond, agent d'entretien | éliminer N monstres d'un type | sac +2 places |
+| Gérard, stagiaire de la régie | abattre le monstre vedette étoilé | loot box en argent |
+| Mamie Josette, ex-candidate | retrouver un objet perdu sur l'étage | soin complet, PV max +4 |
+| Kévin, influenceur égaré | parades, coups lourds ou éliminations à distance | objet rare, audience |
+| Odile, bricoleuse clandestine | donner des composants d'artisanat | amélioration gratuite de l'arme |
+
 ## Compétences et monstres tactiques
 
 - **Bouton POUVOIR** : chaque rôle a une compétence avec temps de recharge (appui long = description).

@@ -26,7 +26,10 @@ enum FeatureKind {
     "Une tête de pierre grimaçante. Une plaque dorée : « Les menteurs y perdent la main. "
         "Les autres y gagnent un cadeau. Statistiquement. »",
     ['Mettre la main dedans', 'Passer son chemin'],
-  );
+  ),
+
+  /// Personnage non joueur : titre, texte et choix dépendent de sa quête (voir `Game`).
+  npc('Personnage', 84, '', []);
 
   const FeatureKind(this.title, this.sprite, this.text, this.options);
   final String title;

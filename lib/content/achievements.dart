@@ -102,6 +102,12 @@ const achievementDefs = <AchievementDef>[
       "Il a gonflé, il a explosé, et vous étiez déjà ailleurs. Le kamikaze est mort pour rien. "
           "Comme tous les kamikazes, me direz-vous. Mais lui, en plus, c'était un rat.",
       secret: true),
+  AchievementDef('good_deed', 'Bonne action', "Accomplir la quête d'un PNJ.", BoxTier.bronze,
+      "Vous avez aidé quelqu'un sans rien attendre en retour ! Enfin, en attendant une récompense. "
+          "Mais c'est l'intention qui compte. Non, en fait, c'est la récompense."),
+  AchievementDef('social_worker', 'Assistant social du donjon', 'Accomplir 5 quêtes dans une même run.', BoxTier.or,
+      "Cinq PNJ aidés ! Le syndicat des PNJ vous nomme membre d'honneur. Les avantages : aucun. "
+          "Les cotisations : élevées."),
   AchievementDef('specialist', 'Spécialiste autoproclamé', 'Monter une compétence au niveau 6.', BoxTier.argent,
       "Niveau 6 dans une compétence ! Vous êtes officiellement un expert. Notre service juridique précise que "
           "« expert » n'engage à rien et ne protège pas des monstres."),

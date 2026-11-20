@@ -208,6 +208,8 @@ void main() {
       final d = _freeDir(g);
       b.pos = g.player.pos + d.delta;
       b.hp = b.maxHp ~/ 2 + 1;
+      // Le boss frappe fort : le héros du test doit tenir le temps de l'enrager.
+      g.player.maxHp = 9999;
       for (var i = 0; i < 20 && !b.enraged && b.alive; i++) {
         g.player.hp = g.player.maxHp;
         g.act(MoveAction(d));

@@ -1,6 +1,8 @@
+import '../content/crafting.dart';
 import '../content/features.dart';
 import '../content/items.dart';
 import '../content/monsters.dart';
+import '../content/quests.dart';
 import '../content/status.dart';
 import 'grid.dart';
 
@@ -103,6 +105,36 @@ class Feature {
   /// Sponsor honoré par un autel.
   final int sponsorIndex;
   bool used = false;
+}
+
+/// Quête d'un PNJ, valable pour l'étage en cours.
+class Quest {
+  Quest(this.npc, this.feature);
+  final NpcDef npc;
+
+  /// Le PNJ sur la carte.
+  final Feature feature;
+  int goal = 1;
+  int progress = 0;
+  bool accepted = false;
+  bool rewarded = false;
+
+  /// Type de monstre visé (chasse, ménage), ou null pour « n'importe lesquels ».
+  String? monsterId;
+
+  /// Identifiant du monstre vedette à abattre.
+  int? targetId;
+
+  /// Objet perdu : position sur la carte (null une fois ramassé) et nom.
+  Pos? itemPos;
+  String itemName = '';
+  Component? component;
+  Stunt? stunt;
+
+  bool get done => progress >= goal;
+
+  /// Prénom du PNJ (« Raymond »).
+  String get shortName => npc.name.split(',').first;
 }
 
 /// Piège caché.

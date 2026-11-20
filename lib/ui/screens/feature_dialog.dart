@@ -32,11 +32,19 @@ class _FeatureDialogState extends State<FeatureDialog> {
 
   String _sub(String s) => s.replaceAll('{sponsor}', g.show.sponsors[widget.feature.sponsorIndex].def.name);
 
-  void _choose(int i) => setState(() => _result = widget.c.chooseFeature(i));
+  /// Texte affiché avant le choix (le texte d'un PNJ change une fois la quête acceptée).
+  String? _intro;
+
+  void _choose(int i) {
+    _intro ??= g.featureText(widget.feature);
+    setState(() => _result = widget.c.chooseFeature(i));
+  }
 
   @override
   Widget build(BuildContext context) {
-    final k = widget.feature.kind;
+    final f = widget.feature;
+    final options = g.featureOptions(f);
+    final tint = g.featureTint(f);
     final r = _result;
     final done = r != null && r.closed;
     return PopScope(
@@ -44,7 +52,7 @@ class _FeatureDialogState extends State<FeatureDialog> {
       onPopInvokedWithResult: (didPop, _) {
         // Retour = « passer son chemin ».
         if (!didPop && !done) {
-          _choose(k.options.length - 1);
+          _choose(options.length - 1);
           Navigator.of(context).pop();
         }
       },
@@ -60,13 +68,19 @@ class _FeatureDialogState extends State<FeatureDialog> {
             children: [
               Row(
                 children: [
-                  SpriteIcon(widget.atlas, k.sprite, size: 56),
+                  SpriteIcon(widget.atlas, g.featureSprite(f), size: 56, tint: tint),
                   const SizedBox(width: 12),
-                  Expanded(child: Text(k.title, style: const TextStyle(color: Palette.gold, fontSize: 18))),
+                  Expanded(child: Text(g.featureTitle(f), style: const TextStyle(color: Palette.gold, fontSize: 18))),
                 ],
               ),
               const SizedBox(height: 12),
-              Text(_sub(k.text), style: const TextStyle(color: Palette.text, fontSize: 14, height: 1.4)),
+              // Le texte d'un PNJ peut être long : il défile.
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Text(_sub(r != null && r.closed ? _intro ?? '' : g.featureText(f)),
+                      style: const TextStyle(color: Palette.text, fontSize: 14, height: 1.4)),
+                ),
+              ),
               const SizedBox(height: 14),
               if (r != null && r.text.isNotEmpty)
                 Container(
@@ -85,18 +99,19 @@ class _FeatureDialogState extends State<FeatureDialog> {
                   child: Text('CONTINUER', style: pixel(10, color: Palette.bg)),
                 )
               else
-                for (var i = 0; i < k.options.length; i++)
+                for (var i = 0; i < options.length; i++)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         alignment: Alignment.centerLeft,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        side: BorderSide(color: i == k.options.length - 1 ? Palette.panelBorder : Palette.gold),
+                        side: BorderSide(
+                            color: i == options.length - 1 && options.length > 1 ? Palette.panelBorder : Palette.gold),
                         shape: const RoundedRectangleBorder(),
                       ),
                       onPressed: () => _choose(i),
-                      child: Text(_sub(k.options[i]), style: const TextStyle(color: Palette.text, fontSize: 14)),
+                      child: Text(_sub(options[i]), style: const TextStyle(color: Palette.text, fontSize: 14)),
                     ),
                   ),
             ],

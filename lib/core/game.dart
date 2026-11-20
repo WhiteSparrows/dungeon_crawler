@@ -2,6 +2,7 @@ import '../content/achievements.dart';
 import '../content/crafting.dart';
 import '../content/features.dart';
 import '../content/mastery.dart';
+import '../content/quests.dart';
 import '../content/interviews.dart';
 import '../content/items.dart';
 import '../content/lines_fr.dart';
@@ -250,6 +251,12 @@ class Game {
   Actor? boss;
   bool _bossAnnounced = false;
 
+  // Quêtes des PNJ
+  /// Quête de l'étage (null s'il n'y a pas de PNJ).
+  Quest? quest;
+  int questsDone = 0;
+  String? _lastNpc;
+
   // Compétences qui progressent à l'usage
   final masteryXp = <Mastery, int>{};
   int masteryXpOf(Mastery m) => masteryXp[m] ?? 0;
@@ -478,7 +485,12 @@ class Game {
         final chest = chestAt(target);
         final feature = featureAt(target);
         if (feature != null && m == null) {
-          if (feature.used) return [MessageEvent('${feature.kind.title} : déjà utilisé. Il boude.')];
+          if (feature.used) {
+            if (feature.kind == FeatureKind.npc) {
+              return [MessageEvent('${quest?.shortName ?? 'Le personnage'} vous fait un petit signe. Rien de plus.')];
+            }
+            return [MessageEvent('${feature.kind.title} : déjà utilisé. Il boude.')];
+          }
           activeFeature = feature;
           return [FeatureEvent(feature.pos)];
         }
@@ -492,6 +504,7 @@ class Game {
           events.add(MoveEvent(player.id, player.pos, target));
           player.pos = target;
           _collect(events);
+          _collectQuestItem(events);
           _checkTrap(events);
         } else {
           return const [];
@@ -557,7 +570,9 @@ class Game {
         }
         _spend(heavyCost);
         events.add(const MessageEvent('COUP LOURD !', MessageKind.good));
+        final hpBefore = m.hp;
         _attack(player, m, events, power: 1.6);
+        if (m.hp < hpBefore) _questStunt(Stunt.heavy, events);
         if (m.alive && rng.chance(hasPerk(Mastery.brawl, 8) ? 0.5 : 0.2)) _applyStatus(m, Status.stun, events);
       case ShoveAction(:final dir):
         final m = monsterAt(player.pos + dir.delta);
@@ -701,7 +716,7 @@ class Game {
     for (var i = 0; i < n; i++) {
       final p = _randomFreeCell();
       if (p == null || p.manhattan(level.stairs) < 2) continue;
-      final kind = rng.pick(FeatureKind.values);
+      final kind = rng.pick(FeatureKind.values.where((k) => k != FeatureKind.npc).toList());
       features.add(Feature(p, kind, sponsorIndex: rng.nextInt(show.sponsors.length)));
     }
     final nTraps = 1 + floor ~/ 3 + rng.range(0, 1);
@@ -792,14 +807,280 @@ class Game {
     }
   }
 
+  // ================================================================ quêtes
+
+  /// Place éventuellement un PNJ et prépare sa quête.
+  void _spawnNpc() {
+    if (floor >= finalFloor) return;
+    if (floor > 1 && !rng.chance(0.6)) return;
+    final p = _randomFreeCell();
+    if (p == null || p.manhattan(level.stairs) < 2) return;
+    final npc = rng.pick(npcs.where((n) => n.id != _lastNpc).toList());
+    final f = Feature(p, FeatureKind.npc);
+    final q = Quest(npc, f);
+    switch (npc.kind) {
+      case QuestKind.cull:
+        final counts = <String, int>{};
+        for (final m in monsters) {
+          if (m.isBoss || m.disguised) continue;
+          counts[m.monster!.id] = (counts[m.monster!.id] ?? 0) + 1;
+        }
+        if (counts.isEmpty) return;
+        final best = counts.entries.reduce((a, b) => b.value > a.value ? b : a);
+        if (best.value >= 2) {
+          q.monsterId = best.key;
+          q.goal = best.value.clamp(2, 3 + floor ~/ 5);
+        } else {
+          q.goal = counts.values.fold(0, (a, b) => a + b).clamp(1, 4);
+        }
+      case QuestKind.hunt:
+        final pool = _themePool().where((d) => !d.boss && d.id != 'mimic').toList();
+        final pos = _randomFreeCell();
+        if (pool.isEmpty || pos == null) return;
+        final def = rng.pick(pool);
+        final m = _makeMonster(def, pos)
+          ..elite = true
+          ..atk += 2
+          ..def += 1;
+        m.maxHp = (m.maxHp * 1.8).round();
+        m.hp = m.maxHp;
+        monsters.add(m);
+        q
+          ..monsterId = def.id
+          ..targetId = m.id;
+      case QuestKind.fetch:
+        Pos? best;
+        for (var i = 0; i < 8; i++) {
+          final c = _randomFreeCell();
+          if (c == null) continue;
+          if (best == null || c.manhattan(p) > best.manhattan(p)) best = c;
+        }
+        if (best == null) return;
+        q
+          ..itemPos = best
+          ..itemName = rng.pick(lostItems);
+      case QuestKind.donate:
+        q
+          ..component = rng.pick(const [Component.scrap, Component.bone, Component.cloth, Component.goo, Component.wood])
+          ..goal = 3 + floor ~/ 4;
+      case QuestKind.stunt:
+        final s = rng.pick(Stunt.values);
+        q
+          ..stunt = s
+          ..goal = switch (s) {
+            Stunt.parry => 2 + floor ~/ 6,
+            Stunt.heavy => 3 + floor ~/ 5,
+            Stunt.rangedKill => 2,
+          };
+    }
+    _lastNpc = npc.id;
+    features.add(f);
+    quest = q;
+  }
+
+  /// Or offert à la fin d'une quête.
+  int get questGold => 15 + floor * 5;
+
+  String _questSub(Quest q, String s) {
+    final monster = q.monsterId == null ? 'monstres' : '« ${monsterById(q.monsterId!).name} »';
+    return s
+        .replaceAll('{n}', '${q.goal}')
+        .replaceAll('{left}', '${q.goal - q.progress}')
+        .replaceAll('{monster}', monster)
+        .replaceAll('{item}', q.itemName)
+        .replaceAll('{component}', q.component?.label.toLowerCase() ?? '')
+        .replaceAll('{stunt}', q.stunt?.label ?? '');
+  }
+
+  /// Ligne de suivi de la quête acceptée (null sinon).
+  String? get questLine {
+    final q = quest;
+    if (q == null || !q.accepted || q.rewarded) return null;
+    if (q.done) return 'Retournez voir ${q.shortName} pour la récompense.';
+    final monster = q.monsterId == null ? 'monstres' : monsterById(q.monsterId!).name;
+    return switch (q.npc.kind) {
+      QuestKind.cull => 'Éliminer : $monster (${q.progress}/${q.goal})',
+      QuestKind.hunt => 'Abattre le $monster étoilé',
+      QuestKind.fetch => 'Retrouver ${q.itemName}',
+      QuestKind.donate =>
+        'Apporter ${q.goal} ${q.component!.label.toLowerCase()} à ${q.shortName} (${materialCount(q.component!)}/${q.goal})',
+      QuestKind.stunt => '${_cap(q.stunt!.label)} (${q.progress}/${q.goal})',
+    };
+  }
+
+  /// Titre, image, texte et choix d'un lieu interactif (dynamiques pour un PNJ).
+  String featureTitle(Feature f) => f.kind == FeatureKind.npc ? (quest?.npc.name ?? f.kind.title) : f.kind.title;
+  int featureSprite(Feature f) => f.kind == FeatureKind.npc ? (quest?.npc.sprite ?? f.kind.sprite) : f.kind.sprite;
+  int? featureTint(Feature f) => f.kind == FeatureKind.npc ? quest?.npc.tint : null;
+
+  String featureText(Feature f) {
+    final q = quest;
+    if (f.kind != FeatureKind.npc || q == null) return f.kind.text;
+    if (!q.accepted) {
+      return '${q.npc.intro}\n\n${_questSub(q, q.npc.ask)}\n\nRécompense : $questGold or et ${q.npc.reward.label}.';
+    }
+    if (q.done) return '${q.shortName} vous attend, les yeux brillants. Mission accomplie : réclamez votre dû.';
+    return _questSub(q, q.npc.waiting);
+  }
+
+  List<String> featureOptions(Feature f) {
+    final q = quest;
+    if (f.kind != FeatureKind.npc || q == null) return f.kind.options;
+    if (!q.accepted) return const ['Accepter la quête', 'Refuser poliment'];
+    if (q.done) return const ['Réclamer la récompense', 'Plus tard'];
+    if (q.npc.kind == QuestKind.donate) {
+      return ['Donner ${q.goal} ${q.component!.label.toLowerCase()} (vous en avez ${materialCount(q.component!)})', 'Plus tard'];
+    }
+    return const ["Je m'en occupe"];
+  }
+
+  FeatureResult _chooseNpc(Feature f, int index, List<GameEvent> events) {
+    final q = quest!;
+    var text = '';
+    var close = true;
+    if (!q.accepted) {
+      if (index == 0) {
+        q.accepted = true;
+        if (q.done) {
+          text = 'Vous annoncez que c\'est déjà fait. ${q.shortName} n\'en revient pas.\n\n${_rewardQuest(q, events)}';
+        } else {
+          text = 'Marché conclu. ${q.shortName} compte sur vous. Le public aussi, mais pour d\'autres raisons.';
+          events.add(MessageEvent('Nouvelle quête : ${questLine ?? ''}', MessageKind.good));
+        }
+      } else {
+        text = 'Vous déclinez poliment. ${q.shortName} soupire. Vous pouvez encore changer d\'avis.';
+      }
+    } else if (q.done) {
+      if (index == 0) {
+        text = _rewardQuest(q, events);
+      } else {
+        text = '${q.shortName} patiente. Ne tardez pas trop, l\'étage a une date de démolition.';
+      }
+    } else if (q.npc.kind == QuestKind.donate && index == 0) {
+      final c = q.component!;
+      if (materialCount(c) < q.goal) {
+        text = 'Il vous manque ${q.goal - materialCount(c)} ${c.label.toLowerCase()}. Démontez des objets ou fouillez.';
+        close = false;
+      } else {
+        materials[c] = materialCount(c) - q.goal;
+        q.progress = q.goal;
+        text = _rewardQuest(q, events);
+      }
+    } else {
+      text = 'Vous repartez. ${q.shortName} vous fait un signe d\'encouragement.';
+    }
+    if (close) activeFeature = null;
+    show.onEvents(events, turn);
+    _checkAchievements(events);
+    return FeatureResult(text, events, closed: close);
+  }
+
+  /// Remet la récompense ; renvoie le texte de remerciement.
+  String _rewardQuest(Quest q, List<GameEvent> events) {
+    q.rewarded = true;
+    q.feature.used = true;
+    questsDone++;
+    gold += questGold;
+    events.add(PickupEvent(q.feature.pos, '+$questGold or'));
+    events.add(GoldEvent(questGold));
+    String extra;
+    switch (q.npc.reward) {
+      case QuestReward.box:
+        _gainBox(BoxTier.argent, 'Quête de ${q.shortName}', events);
+        extra = 'loot box en argent';
+      case QuestReward.bag:
+        bagBonus += 2;
+        extra = 'sac +2 places';
+      case QuestReward.knit:
+        baseMaxHp += 4;
+        _recalcStats();
+        final before = player.hp;
+        player.hp = player.maxHp;
+        events.add(HealEvent(player.pos, player.hp - before));
+        extra = 'PV max +4, soin complet';
+      case QuestReward.fame:
+        show.addHype(25);
+        final it = rollItem(rng, Rarity.rare, floor, allowPotions: false);
+        if (!_addToBag(it)) floorItems.add(FloorItem.item(it, player.pos));
+        extra = '${nameOf(it)}, hype +25';
+      case QuestReward.forge:
+        final w = weapon;
+        if (w != null && plusOf(w) < maxUpgrade) {
+          itemUpgrades[w.id] = plusOf(w) + 1;
+          _recalcStats();
+          extra = nameOf(w);
+        } else {
+          materials[Component.crystal] = materialCount(Component.crystal) + 3;
+          extra = '3 cristaux';
+        }
+    }
+    show.addHype(10);
+    events.add(MessageEvent('QUÊTE ACCOMPLIE : +$questGold or, $extra.', MessageKind.good));
+    if (rng.chance(0.5)) {
+      events.add(MessageEvent(
+          rng.pick(const [
+            "Une bonne action ! Le public est perplexe. Ce n'est pas le concept de l'émission.",
+            "Aider son prochain. Comme c'est touchant. Et comme c'est mauvais pour l'audimat.",
+            "Bravo. Notre service juridique vérifie que les PNJ ont bien signé leur décharge.",
+          ]),
+          MessageKind.maestro));
+    }
+    return '${q.npc.thanks}\n\n(+$questGold or, $extra)';
+  }
+
+  void _questAdvance(Quest q, List<GameEvent> events) {
+    if (q.rewarded || q.done) return;
+    q.progress++;
+    if (!q.accepted) return;
+    if (q.done) {
+      events.add(MessageEvent('Objectif de quête atteint ! Retournez voir ${q.shortName}.', MessageKind.good));
+      events.add(PickupEvent(player.pos, 'QUÊTE OK'));
+      show.addHype(4);
+    } else {
+      events.add(PickupEvent(player.pos, '${q.progress}/${q.goal}'));
+    }
+  }
+
+  void _questKill(Actor victim, List<GameEvent> events) {
+    final q = quest;
+    if (q == null) return;
+    switch (q.npc.kind) {
+      case QuestKind.cull when q.monsterId == null || q.monsterId == victim.monster!.id:
+        _questAdvance(q, events);
+      case QuestKind.hunt when victim.id == q.targetId:
+        _questAdvance(q, events);
+      default:
+        break;
+    }
+  }
+
+  void _questStunt(Stunt s, List<GameEvent> events) {
+    final q = quest;
+    if (q != null && q.accepted && q.npc.kind == QuestKind.stunt && q.stunt == s) _questAdvance(q, events);
+  }
+
+  void _collectQuestItem(List<GameEvent> events) {
+    final q = quest;
+    if (q == null || q.itemPos != player.pos) return;
+    q.itemPos = null;
+    events.add(const ItemPickedEvent());
+    events.add(MessageEvent(
+        q.accepted
+            ? 'Vous retrouvez ${q.itemName} ! ${q.shortName} va être ravie.'
+            : 'Vous ramassez ${q.itemName}. Ça appartient sûrement à quelqu\'un.',
+        MessageKind.good));
+    _questAdvance(q, events);
+  }
+
   /// Choix devant un lieu interactif. Le dernier choix (« passer ») ferme sans rien faire.
   FeatureResult chooseFeature(int index) {
     final f = activeFeature;
-    if (f == null || index < 0 || index >= f.kind.options.length) {
+    if (f == null || index < 0 || index >= featureOptions(f).length) {
       return const FeatureResult('', [], closed: false);
     }
     commands.add('f:$index');
     final events = <GameEvent>[];
+    if (f.kind == FeatureKind.npc) return _chooseNpc(f, index, events);
     String text;
     var close = true;
     var use = true;
@@ -1418,6 +1699,11 @@ class Game {
     features.clear();
     traps.clear();
     activeFeature = null;
+    final old = quest;
+    if (old != null && old.accepted && !old.rewarded) {
+      events.add(MessageEvent('Quête abandonnée : ${old.shortName} ne vous reverra jamais. Tant pis.'));
+    }
+    quest = null;
     // Un étage sur trois environ (à partir du 2) a un modificateur.
     floorMod = floor >= 2 && rng.chance(0.35) ? rng.pick(FloorMod.values) : null;
     if (floorMod == FloorMod.shortEpisode) floorTimer = (floorTimer - 40).clamp(60, 9999);
@@ -1430,6 +1716,7 @@ class Game {
     _spawnMonsters();
     _spawnLoot();
     _spawnFeatures();
+    _spawnNpc();
     _applyFloorMod();
     _updateFov();
     events.add(FloorEvent(floor));
@@ -1732,6 +2019,7 @@ class Game {
     final id = victim.monster!.id;
     _killsById[id] = (_killsById[id] ?? 0) + 1;
     if (id == 'mimic') _mimicKills++;
+    _questKill(victim, events);
     if (weapon?.id == 'butter_knife') _butterKills++;
     final e = victim.monster!.feminine ? 'e' : '';
     events.add(MessageEvent('${_cap(_the(victim))} est éliminé$e.', MessageKind.good));
@@ -1823,6 +2111,8 @@ class Game {
     if (_mimicKills >= 1) _unlock('mimic', events);
     if (floor >= 5) _unlock('deep', events);
     if (crafted >= 5) _unlock('crafter', events);
+    if (questsDone >= 1) _unlock('good_deed', events);
+    if (questsDone >= 5) _unlock('social_worker', events);
     if (dismantled >= 10) _unlock('recycler', events);
     if (_killTurns.length >= 3 && _killTurns.last - _killTurns[_killTurns.length - 3] <= 6) {
       _unlock('carnage', events);
@@ -1940,7 +2230,7 @@ class Game {
     final lines = masteryLines[m]!;
     if (after % 2 == 0 || masteryPerks.any((p) => p.mastery == m && p.level == after)) {
       events.add(MessageEvent(
-          'MAESTRO : « ${lines[after % lines.length].replaceAll('{n}', '$after')} »', MessageKind.maestro));
+          lines[after % lines.length].replaceAll('{n}', '$after'), MessageKind.maestro));
     }
     show.addHype(2);
     if (m == Mastery.guard) _recalcStats();
@@ -2037,7 +2327,7 @@ class Game {
       events.add(MessageEvent('Atelier : vous fabriquez ${r.name}.', MessageKind.good));
     }
     if (rng.chance(0.15)) {
-      events.add(const MessageEvent("MAESTRO : « Du fait main ! Le public adore l'artisanat. Moi, je m'endors. »",
+      events.add(const MessageEvent("Du fait main ! Le public adore l'artisanat. Moi, je m'endors.",
           MessageKind.maestro));
     }
   }
@@ -2064,6 +2354,7 @@ class Game {
       events.add(MessageEvent('PARADE ! Vous bloquez ${_the(m)} et ripostez.', MessageKind.good));
       show.addHype(power > 1 ? 6 : 3);
       _train(Mastery.guard, 2, events);
+      _questStunt(Stunt.parry, events);
       final strong = hasPerk(Mastery.guard, 6);
       _attack(player, m, events, power: (power > 1 ? 1.0 : 0.6) + (strong ? 0.4 : 0), sure: true);
       if (power > 1 && m.alive) _applyStatus(m, Status.stun, events);
@@ -2137,6 +2428,7 @@ class Game {
     if (isCrit) crits++;
     events.add(MessageEvent('Touché : ${_the(target)} ($dmg).${isCrit ? ' CRITIQUE !' : ''}'));
     if (!target.alive) {
+      _questStunt(Stunt.rangedKill, events);
       _kill(target, player, events);
       return;
     }
@@ -2395,7 +2687,7 @@ class Game {
 
   /// Version du format de sauvegarde. À incrémenter dès que le moteur change de façon
   /// à rendre un ancien journal impossible à rejouer à l'identique.
-  static const saveVersion = 6;
+  static const saveVersion = 7;
 
   static String _encode(PlayerAction a) => switch (a) {
         MoveAction(:final dir) => 'm${dir.index}',
